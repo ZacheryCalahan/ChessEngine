@@ -1,74 +1,119 @@
 ﻿public class Search
 {
+    public event Action<Move>? OnSearchComplete;
+    Move bestMoveThisIteration;
+    int bestEvalThisIteration;
+    volatile bool searchCanceled;
+    Move bestMove;
+    bool hasFoundOneMove;
+    Board board;
 
-    public Search()
+    public Search(Board board)
     {
-
+        bestMoveThisIteration = new();
+        bestEvalThisIteration = int.MinValue;
+        searchCanceled = false;
+        hasFoundOneMove = false;
+        this.board = board;
     }
 
-    public Move StartSearch(Board board)
+    public void StartSearchDeepening()
     {
-        int bestEval = int.MinValue;
-        Move bestMove = new();
+        searchCanceled = false;
+        hasFoundOneMove = false;
 
-        List<Move> ourMoves = MoveGenerator.GenerateLegalMoves(board);
+        // Iterative deepening search
+        for (int searchDepth = 1; searchDepth < int.MaxValue; searchDepth++)
+        {    
+            SearchMoves(searchDepth, int.MinValue, int.MaxValue);
 
-        for (int i = 0; i < ourMoves.Count; i++)
-        {
-            // Find eval of this move
-            board.MakeMove(ourMoves[i]);
-
-            int eval = SearchMove(board, 3, int.MinValue, int.MaxValue);
-            if (eval > bestEval)
+            if (searchCanceled)
             {
-                bestEval = eval;
-                bestMove = ourMoves[i];
+                Console.WriteLine("Search stopped.");
+                break;
             }
-
-            board.UnMakeMove(ourMoves[i]);
+            bestMove = bestMoveThisIteration;
+            hasFoundOneMove = true;
         }
 
-        return bestMove;
+        // In the case search is canceled before a good move is found, just return any move.
+        if (!hasFoundOneMove)
+        {
+            Console.WriteLine("Best move not found!");
+            return;
+        }
+
+        OnSearchComplete?.Invoke(bestMoveThisIteration);
     }
 
-    public int SearchMove(Board board, int depth, int alpha, int beta)
+    public void StopSearch()
     {
+        searchCanceled = true;
+    }
+
+    int SearchMoves(int depth, int alpha, int beta, int depthFromRoot = 0)
+    {
+        if (searchCanceled)
+        {
+            return 0;
+        }
+
         if (depth == 0)
+        {
             return Evaluation.Evaluate(board);
+        }
 
-        int bestEval = int.MinValue;
+        // Get all available moves and order them
         List<Move> moves = MoveGenerator.GenerateLegalMoves(board);
-
-        // Check for stalemate or checkmate
+        
+        // Check if in check or stalemate
         if (moves.Count == 0)
         {
-            // Treat them the same for now, but use checks later!
-            return int.MinValue;
+            return -10000;
         }
         
+        MoveOrder.OrderMoves(board, ref moves);
+
         // Search moves
         for (int i = 0; i < moves.Count; i++)
         {
+            Move move = moves[i];
             board.MakeMove(moves[i]);
-            int eval = -SearchMove(board, depth - 1, -beta, -alpha);
+
+            // Search can be extended here for interesting cases
+
+            int eval = -SearchMoves(depth - 1, -beta, -alpha, depthFromRoot + 1);
             board.UnMakeMove(moves[i]);
 
-            if (eval > bestEval)
+            if (searchCanceled)
             {
-                bestEval = eval;
-                if (eval > alpha)
+                // Prevent the return eval of 0 on cancel from setting a bad move
+                return 0;
+            }
+
+            // Stop searching this path if any move would be too good for the opponent
+            if (eval >= beta)
+            {
+                return beta;
+            }
+
+            // Check if this move is the best move
+            if (eval > alpha)
+            {
+                alpha = eval;
+
+                // If we're at the root, say this is the best move.
+                if (depthFromRoot == 0)
                 {
-                    alpha = eval;
+                    bestMoveThisIteration = moves[i];
+                    bestEvalThisIteration = eval;
+                    hasFoundOneMove = true;
                 }
             }
 
-            if (eval >= beta)
-                return bestEval;
-            
-            
         }
 
-        return bestEval;
+        return alpha;
     }
 }
 

@@ -204,7 +204,6 @@ public static class MoveGenerator
 
         foreach (Move moveToVerify in psuedolegalMoves)
         {
-            Board prevBoard = new Board(board);
             board.MakeMove(moveToVerify);
             
             List<Move> opponentResp = GeneratePsuedolegalMoves(board);
@@ -220,20 +219,7 @@ public static class MoveGenerator
             }
 
 
-            board.UnMakeMove(moveToVerify);
-
-            if (!Board.IsEqual(prevBoard, board))
-            {
-                Console.WriteLine($"Move: {moveToVerify.ToString()}");
-                Console.WriteLine("Expected board:");
-                Console.WriteLine($"State: {prevBoard.CurrentGameState.ToString()}");
-                BoardUtils.PrintBoardChar(prevBoard);
-                Console.WriteLine("Actual board:");
-                Console.WriteLine($"State: {board.CurrentGameState.ToString()}");
-                BoardUtils.PrintBoardChar(board);
-                throw new Exception("Board not returned to original state!");
-            }
-           
+            board.UnMakeMove(moveToVerify);          
         }
 
         return moves;
@@ -250,7 +236,7 @@ public static class MoveGenerator
             if (piece == 0) // Skip empty piece
                 continue;
 
-            if (!Piece.IsColor(piece, board.GetTurnColor())) // Skip opponent piece move generation
+            if (!Piece.IsColor(piece, board.TurnColor)) // Skip opponent piece move generation
                 continue;
 
             switch (Piece.GetPieceType(piece))
@@ -549,10 +535,10 @@ public static class MoveGenerator
 
         // Handle special case of enpassant captures
         ulong enpassantAttacks = 0;
-        if (board.GetEnpassantSquare() != 0)
+        if (board.GetEnpassantSquare != 0)
         {
             // Process en passant into an attack bitboard
-            enpassantAttacks = Bitboard.Intersection(PawnAttacks[colorIndex, location], Bitboard.SquareToBitboard(board.GetEnpassantSquare()));
+            enpassantAttacks = Bitboard.Intersection(PawnAttacks[colorIndex, location], Bitboard.SquareToBitboard(board.GetEnpassantSquare));
         }        
 
         // Add enpassant moves
@@ -579,7 +565,7 @@ public static class MoveGenerator
             if (piece == 0) // Skip empty square
                 continue;
 
-            if (Piece.IsColor(piece, board.GetTurnColor())) // Skip non-opponent pieces
+            if (Piece.IsColor(piece, board.TurnColor)) // Skip non-opponent pieces
                 continue;
 
             // Generate attack bitboard for this piece

@@ -1,12 +1,20 @@
-﻿public static class UCI
+﻿/*
+    UCI, Bot, and Search borrow heavily from SebLague, mostly of the threading/task code to make sure everything was done right.
+ */
+
+public static class UCI
 {
-    static Board CurrentBoard = new();
+    
+    static Bot bot;
+    static UCI() {
+        bot = new();
+        bot.OnMoveChosen += OnMoveChosen;
+    }
 
     public static void Start()
     {
         // Notify GUI we're in UCI mode
         GiveId();
-        Init();
 
         // Command parsing
         while (true)
@@ -22,12 +30,12 @@
                 case "uci": GiveId(); break;
                 case "isready": Console.WriteLine("readyok"); break;
                 case "position": HandlePosition(command); break;
-                case "ucinewgame": CurrentBoard.ImportBoard(); break;
+                case "ucinewgame": bot.board.ImportBoard(); break;
                 case "debug": break;
                 case "setoption": break;
                 case "register": break;
-                case "stop": break;
-                case "p": BoardUtils.PrintBoardChar(CurrentBoard); break;
+                case "stop": HandleStop(); break;
+                case "p": BoardUtils.PrintBoardChar(bot.board); break;
                 case "perft": PrintPerft(command); break;
                 case "quit": return; // Exit program
                 case "go": HandleGo(command); break;
@@ -43,20 +51,15 @@
         Console.WriteLine("uciok");
     }
 
-    static void Init()
-    {
-        CurrentBoard = new();
-    }
-
     static void HandlePosition(string message)
     {
         if (message.ToLower().Contains("startpos"))
         {
-            CurrentBoard.ImportBoard();
+            bot.NewBoard();
         } 
         else if (message.ToLower().Contains("fen"))
         {
-            CurrentBoard.ImportBoard(ParseFen(message));
+            bot.NewBoard(ParseFen(message));
         }
 
         string movestring;
@@ -66,7 +69,7 @@
             string[] moves = movestring.Split(' ');
             foreach (string move in moves)
             {
-                MakeMove(move);
+                bot.MakeMove(move);
             }
         }
         else if (movestring != "none")
@@ -77,6 +80,7 @@
 
     static void PrintPerft(string message)
     {
+        // This will only ever be called out of search, do not worry of mutation.
         PerftUtils perft = new();
         int depth = 0;
         string depthStr = "";
@@ -96,7 +100,7 @@
             return;
         }
 
-        perft.PrintPerftTestDivide(CurrentBoard, depth);
+        perft.PrintPerftTestDivide(bot.board, depth);
     }
 
     static bool GetMoves(string message, out string moves)
@@ -114,95 +118,29 @@
         return true;
     }
 
-    static void MakeMove(string moveString)
-    {
-        int startSquare = 0;
-        int targetSquare = 0;
-
-        try
-        {
-            startSquare = BoardUtils.StringToSquare(moveString.Substring(0, 2));
-            targetSquare = BoardUtils.StringToSquare(moveString.Substring(2, 2));
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"Invalid move: {moveString}");
-            return;
-        }
-
-        int movedPieceType = Piece.GetPieceType(CurrentBoard.GetPiece(startSquare));
-        int movedPiece = CurrentBoard.GetPiece(startSquare);
-
-        // Determine the move flags
-        int pieceCaptured = Piece.None;
-        int flag = Move.StandardMove;
-
-        if (movedPieceType == Piece.Pawn)
-        {
-            // Check promotion
-            if (moveString.Length > 4)
-            {
-                flag = moveString[^1] switch
-                {
-                    'q' => Move.PromoteToQueen,
-                    'r' => Move.PromoteToRook,
-                    'n' => Move.PromoteToKnight,
-                    'b' => Move.PromoteToBishop,
-                    _ => Move.StandardMove
-                };
-            }
-            // Double push
-            else if (startSquare - targetSquare == 16 || startSquare - targetSquare == -16)
-            {
-                flag = Move.PawnDoublePush;
-            }
-            // Enpassant capture (moved to different file, but targeted no piece)
-            else if (startSquare % 8 != targetSquare % 8 && CurrentBoard.GetPiece(targetSquare) == Piece.None)
-            {
-                flag = Move.EnPassantCapture | Move.PieceCapturedFlag;
-                pieceCaptured = Piece.Pawn | Piece.GetOpponentPieceColor(movedPiece);
-            }
-        }
-        else if (movedPieceType == Piece.King)
-        {
-            if (Math.Abs(BoardUtils.FileIndex(startSquare) - BoardUtils.FileIndex(targetSquare)) > 1) {
-                flag = Move.Castle;
-            }
-        }
-
-        // Mark captures, and their piece.
-        if (CurrentBoard.GetPiece(targetSquare) != Piece.None)
-        {
-            flag |= Move.PieceCapturedFlag;
-            pieceCaptured = CurrentBoard.GetPiece(targetSquare);
-        }
-        
-        Move move = new(startSquare, targetSquare, flag, pieceCaptured);
-        CurrentBoard.MakeMove(move);
-    }
-
     static void HandleGo(string message)
     {
         if (message.Contains("time"))
         {
-            // Parse and pass time herew
-            Bot.ThinkTimed(CurrentBoard, 1000);
+            // Parse and pass time here
+            int wtime = TryGetLabeledInt(message, "wtime");
+            int btime = TryGetLabeledInt(message, "btime");
+            int winc = TryGetLabeledInt(message, "winc");
+            int binc = TryGetLabeledInt(message, "binc");
+
+            int thinkTime = bot.DetermineThinkTime(wtime, btime, winc, binc);
+            bot.ThinkTimed(thinkTime);
         }
         else
         {
             // Assume infinite, think for however long you want!
-            Bot.ThinkTimed(CurrentBoard, int.MaxValue);
+            bot.ThinkInfinite();
         }
-
-        Move move = Bot.BestMove();
-
-        string moveString = move.ToString().Substring(0, 4);
-        Console.WriteLine($"bestmove {moveString}");
     }
 
-    static void HandleStop(string message)
+    static void HandleStop()
     {
-        Bot.StopThinking();
+        bot.StopThinking();
     }
 
     static string ParseFen(string message)
@@ -228,6 +166,30 @@
         }
     }
 
-    
+    static void OnMoveChosen(string move)
+    {
+        Console.WriteLine($"bestmove {move}");
+    }
 
+    static int TryGetLabeledInt(string text, string label, int defaultValue = 0)
+    {
+        string valueString = TryGetLabeledValue(text, label);
+        if (int.TryParse(valueString.Split(' ')[0], out int result))
+            return result;
+
+        return defaultValue;
+    }
+
+    static string TryGetLabeledValue(string text, string label, string defaultValue = "")
+    {
+        text = text.Trim();
+        if (text.Contains(label))
+        {
+            int valueStart = text.IndexOf(label) + label.Length;
+            int valueEnd = text.Length;
+            return text.Substring(valueStart, valueEnd - valueStart).Trim();   
+        }
+
+        return defaultValue;
+    }
 }

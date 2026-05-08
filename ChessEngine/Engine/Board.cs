@@ -1,13 +1,17 @@
-﻿public class Board
+﻿using System.Drawing;
+
+public class Board
 {
     public bool IsWhiteTurn { get; private set; }
     public GameState CurrentGameState;
-
     Stack<GameState> oldGameStates;
+
     int[] board;
     ulong[] bitboards;
     ulong whitePieces = 0;
     ulong blackPieces = 0;
+
+    PieceList[] AllPieces;
 
     public Board()
     {
@@ -19,63 +23,8 @@
         }
         CurrentGameState = new();
         oldGameStates = new();
-    }
 
-    public Board(Board b)
-    {
-        IsWhiteTurn = b.IsWhiteTurn;
-        CurrentGameState = b.CurrentGameState;
-        board = new int[64];
-        bitboards = new ulong[Piece.MaxIndex + 1];
-
-        for (int i = 0; i < 64; i++)
-        {
-            board[i] = b.board[i];
-        }
-
-        for (int i = 0; i < Piece.MaxIndex + 1; i++)
-        {
-            bitboards[i] = b.bitboards[i];
-        }
-        
-        oldGameStates = new();
-    }
-
-    /* Game state */
-
-    public int GetTurnColor()
-    {
-        if (IsWhiteTurn)
-            return Piece.White;
-
-        return Piece.Black;
-    }
-
-    public int GetTurnOpponentColor()
-    {
-        if (IsWhiteTurn)
-            return Piece.Black;
-
-        return Piece.White;
-    }
-    
-    public bool HasCastleRight(int color)
-    {
-        return CurrentGameState.HasCastleRights(color);
-    }
-
-    public bool KingsideCastleRight(int color)
-    {
-        return color == Piece.White ?
-            CurrentGameState.WhiteKingsideCastle:
-            CurrentGameState.BlackKingsideCastle;
-    }
-
-    public bool QueensideCastleRight(int color)
-    {
-        return color == Piece.White ?
-            CurrentGameState.WhiteQueensideCastle :
-            CurrentGameState.BlackQueensideCastle;
+        AllPieces = new PieceList[Piece.PieceIndexCount];
     }
 
     public void ImportBoard(string fen = FenUtils.StartPosFen)
@@ -96,21 +45,28 @@
             pos.fiftyMoveCounter,
             pos.enPassantSquare);
         oldGameStates = new();
-    }
 
-    public int GetEnpassantSquare()
-    {
-        return CurrentGameState.EnPassantSquare;
-    }
+        // Piece List
+        for (int i = 0; i < Piece.PieceIndexCount; i++)
+            AllPieces[i] = new PieceList(); // Reset piece lists
 
-    /* Moves */
+        for (int i = 0; i < 64; i++)
+        {
+            int piece = board[i];
+
+            if (piece == 0)
+                continue;
+
+            AllPieces[piece].AddPiece(i);
+        }
+    }
 
     public void MakeMove(Move move)
     {
         // Helpful vars
         int movingPiece = board[move.StartSquare];
-        int capturingPiece = board[move.TargetSquare];
-        int capturedPieceType = Piece.GetPieceType(capturingPiece);
+        int capturedPiece = board[move.TargetSquare];
+        int capturedPieceType = Piece.GetPieceType(capturedPiece);
         int startSquare = move.StartSquare;
         int targetSquare = move.TargetSquare;
         int movingPieceType = Piece.GetPieceType(movingPiece);
@@ -121,7 +77,7 @@
         {
             // Replace the piece with the promotion piece
             bitboards[movingPiece] = Bitboard.RemoveSquare(bitboards[movingPiece], startSquare); // Remove piece from bitboard
-            int promotePiece = GetTurnColor() | move.PromotionPieceType;
+            int promotePiece = TurnColor | move.PromotionPieceType;
             bitboards[promotePiece] = Bitboard.SetSquare(bitboards[promotePiece], startSquare); // Add piece at position for promotion type
             board[startSquare] = promotePiece;
 
@@ -142,7 +98,7 @@
         }
 
         /* Handle castling (and rights!) */
-        if (CurrentGameState.HasCastleRights(GetTurnColor()))
+        if (CurrentGameState.HasCastleRights(TurnColor))
         {
             if (move.IsCastle)
             {
@@ -161,7 +117,7 @@
                 // Move the rook to the correct square
                 int rookTarget = 0;
                 int rookStart = 0;
-                int rookPiece = GetTurnColor() | Piece.Rook;
+                int rookPiece = TurnColor | Piece.Rook;
                 switch (targetSquare)
                 {
                     case 6: // White Kingside
@@ -194,7 +150,7 @@
                     }
 
                 }
-                
+
                 bitboards[rookPiece] = Bitboard.RemoveSquare(bitboards[rookPiece], rookStart); // Remove rook from start
                 bitboards[rookPiece] = Bitboard.SetSquare(bitboards[rookPiece], rookTarget); // Place at target
                 board[rookTarget] = rookPiece;
@@ -202,7 +158,7 @@
             }
             else if (movingPieceType == Piece.King) // Clear castle rights of this color
             {
-                
+
                 if (IsWhiteTurn)
                 {
                     newState.WhiteQueensideCastle = false;
@@ -215,7 +171,7 @@
                 }
             }
             else if (movingPieceType == Piece.Rook) // Clear castle rights of this side in this color
-            { 
+            {
                 if (IsWhiteTurn)
                 {
                     if (startSquare == 7)
@@ -260,10 +216,10 @@
         if (move.IsEnpassantCapture)
         {
             // Remove the captured pawn
-            int capturedPiece = GetTurnOpponentColor() | Piece.Pawn;
-            int capturedPieceLocation = GetEnpassantSquare() + (IsWhiteTurn ? -8 : 8);
+            int capturedPawn = OpponentTurnColor | Piece.Pawn;
+            int capturedPieceLocation = GetEnpassantSquare + (IsWhiteTurn ? -8 : 8);
 
-            bitboards[capturedPiece] = Bitboard.RemoveSquare(bitboards[capturedPiece], capturedPieceLocation);
+            bitboards[capturedPawn] = Bitboard.RemoveSquare(bitboards[capturedPawn], capturedPieceLocation);
             board[capturedPieceLocation] = Piece.None;
         }
 
@@ -272,15 +228,15 @@
         // Update bitboards
         bitboards[movingPiece] = Bitboard.RemoveSquare(bitboards[movingPiece], startSquare); // Remove piece from the start square (moved piece)
         bitboards[movingPiece] = Bitboard.SetSquare(bitboards[movingPiece], targetSquare); // Place piece at target location.
-        if (capturingPiece != 0) // Remove captured piece if capture
-            bitboards[capturingPiece] = Bitboard.RemoveSquare(bitboards[capturingPiece], targetSquare); 
-        UpdateColorBitboards();
+        if (capturedPiece != 0) // Remove captured piece if capture
+            bitboards[capturedPiece] = Bitboard.RemoveSquare(bitboards[capturedPiece], targetSquare);
 
         // Update mailbox
         board[targetSquare] = board[startSquare];
         board[startSquare] = Piece.None;
 
         // Update game state
+        UpdateColorBitboards();
         IsWhiteTurn = !IsWhiteTurn;
 
         if (movingPieceType != Piece.Pawn | move.IsCapture)
@@ -300,7 +256,7 @@
         int capturedPiece = move.LastCapturedPiece;
         int startSquare = move.StartSquare;
         int targetSquare = move.TargetSquare;
-        int colorThatMoved = GetTurnOpponentColor();
+        int colorThatMoved = OpponentTurnColor;
 
         GameState oldGameState = oldGameStates.Pop();
 
@@ -363,12 +319,12 @@
             board[rookTarget] = Piece.None;
             board[rookStart] = rookPiece;
         }
-    
+
         /* Handle enpassant capture */
         if (move.IsEnpassantCapture)
         {
             // Replace the captured pawn
-            int capturedPawn = GetTurnColor() | Piece.Pawn;
+            int capturedPawn = TurnColor | Piece.Pawn;
             int capturedPawnLocation = oldGameState.EnPassantSquare + (Piece.GetPieceColor(capturedPawn) == Piece.White ? 8 : -8);
 
             bitboards[capturedPawn] = Bitboard.SetSquare(bitboards[capturedPawn], capturedPawnLocation);
@@ -383,8 +339,8 @@
         {
             bitboards[capturedPiece] = Bitboard.SetSquare(bitboards[capturedPiece], targetSquare); // Replace captured piece
         }
+
         
-        UpdateColorBitboards();
 
         // Update mailbox
         board[startSquare] = board[targetSquare];
@@ -393,32 +349,24 @@
         else
             board[targetSquare] = Piece.None;
 
+        UpdateColorBitboards();
+
         /* Revert the board state */
         CurrentGameState = oldGameState;
         IsWhiteTurn = !IsWhiteTurn;
+
+    }
+
+    public int TurnColor => IsWhiteTurn ? Piece.White : Piece.Black;
+    public int OpponentTurnColor => IsWhiteTurn ? Piece.Black : Piece.White;
+    public int GetEnpassantSquare => CurrentGameState.EnPassantSquare;
+
+    public bool HasCastleRight(int color) => CurrentGameState.HasCastleRights(color);
+
+    public bool KingsideCastleRight(int color) => color == Piece.White ? CurrentGameState.WhiteKingsideCastle : CurrentGameState.BlackKingsideCastle;
+
+    public bool QueensideCastleRight(int color) => color == Piece.White ? CurrentGameState.WhiteQueensideCastle : CurrentGameState.BlackQueensideCastle;
     
-    }
-
-    void UpdateColorBitboards()
-    {
-        ulong bb = 0;
-
-        for (int i = Piece.WhitePawn; i < 7; i++)
-        {
-            bb |= bitboards[i];
-        }
-
-        whitePieces = bb;
-        bb = 0;
-
-        for (int i = Piece.BlackPawn; i < Piece.PieceIndexCount; i++)
-        {
-            bb |= bitboards[i];
-        }
-        blackPieces = bb;
-
-    }
-
     /* Piece retrieval */
 
     public int GetPiece(int square)
@@ -462,32 +410,37 @@
         return whitePieces | blackPieces;
     }
 
-
-    public static bool IsEqual(Board a, Board b)
+    /* Private helpers */
+    void MovePiece(int piece, int startSquare, int targetSquare)
     {
-        // Compare boards
-        for (int i = 0; i < 64; i++)
-        {
-            if (a.board[i] != b.board[i])
-                return false;
-        }
+        bitboards[piece] = Bitboard.RemoveSquare(bitboards[piece], startSquare);
+        bitboards[piece] = Bitboard.SetSquare(bitboards[piece], targetSquare);
 
-        // Compare bitboards (start with White.Pawn, because index 0 is full of junk regardless.)
-        for (int i = 1; i < a.bitboards.Length; i++)
-        {
-            if (a.bitboards[i] != b.bitboards[i])
-                return false;
-        }
+        board[startSquare] = Piece.None;
+        board[targetSquare] = piece;
 
-        // Compare gamestate
-        if (a.IsWhiteTurn != b.IsWhiteTurn)
-            return false;
-
-
-
-        return true;
+        AllPieces[piece].MovePiece(startSquare, targetSquare);
     }
 
-    
+    void UpdateColorBitboards()
+    {
+        ulong bb = 0;
+
+        for (int i = Piece.WhitePawn; i < 7; i++)
+        {
+            bb |= bitboards[i];
+        }
+
+        whitePieces = bb;
+        bb = 0;
+
+        for (int i = Piece.BlackPawn; i < Piece.PieceIndexCount; i++)
+        {
+            bb |= bitboards[i];
+        }
+        blackPieces = bb;
+
+    }
+
 }
 

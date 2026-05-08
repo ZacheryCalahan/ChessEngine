@@ -88,7 +88,25 @@ public readonly struct Move
             }
         }
     }
-    
+
+    public string ToUCIMoveString()
+    {
+        string moveString = ToString().Substring(0, 4);
+        if (IsPromotion)
+        {
+            moveString += PromotionPieceType switch
+            {
+                Piece.Queen => "q",
+                Piece.Knight => "n",
+                Piece.Bishop => "b",
+                Piece.Rook => "r",
+                _ => ""
+            };
+        }
+
+        return moveString;
+    }
+
     public override string ToString()
     {
         string moveString = BoardUtils.SquareToString(StartSquare) + BoardUtils.SquareToString(TargetSquare);
@@ -123,7 +141,7 @@ public readonly struct Move
 
         return moveString + "" + promotion + "" + (IsCapture ? "X" : "");
     }
-    
+
     public static Move NullMove = new Move(0);
     
     public static bool operator ==(Move a, Move b)
