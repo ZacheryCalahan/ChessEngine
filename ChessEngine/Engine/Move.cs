@@ -1,4 +1,6 @@
 ﻿
+using System.Diagnostics.CodeAnalysis;
+
 public readonly struct Move
 {
     // Struct members
@@ -151,10 +153,12 @@ public readonly struct Move
 
     public static bool operator !=(Move a, Move b)
     {
-        return a.moveValue != b.moveValue && a.lastCapturedPiece != b.lastCapturedPiece;
+        return a.moveValue != b.moveValue || a.lastCapturedPiece != b.lastCapturedPiece;
     }
 
+    public override bool Equals(object? obj) => obj is Move m && this == m;
 
+    public override int GetHashCode() => HashCode.Combine(moveValue, lastCapturedPiece);
 
 }
 

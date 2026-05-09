@@ -1,17 +1,24 @@
-﻿public class Search
+﻿using System.Diagnostics;
+
+public class Search
 {
+    const int infinity = 99999999;
     public event Action<Move>? OnSearchComplete;
-    Move bestMoveThisIteration;
+    Move bestMoveThisIteration; // This is the best move found within a single iteration
     int bestEvalThisIteration;
     volatile bool searchCanceled;
-    Move bestMove;
+    Move bestMove; // This is the best move found within the search
+    int bestEval;
     bool hasFoundOneMove;
     Board board;
 
+    Stopwatch sw;
+
     public Search(Board board)
     {
+        sw = new();
         bestMoveThisIteration = new();
-        bestEvalThisIteration = int.MinValue;
+        bestEvalThisIteration = -infinity;
         searchCanceled = false;
         hasFoundOneMove = false;
         this.board = board;
@@ -24,26 +31,47 @@
 
         // Iterative deepening search
         for (int searchDepth = 1; searchDepth < int.MaxValue; searchDepth++)
-        {    
-            SearchMoves(searchDepth, int.MinValue, int.MaxValue);
+        {
+            // Search through this depth, and set the bestMoveThisIteration
+            sw.Restart();
+            SearchMoves(searchDepth, -infinity, infinity);
+            sw.Stop();
 
             if (searchCanceled)
             {
-                Console.WriteLine("Search stopped.");
+                Console.WriteLine("Search complete:");
+                Console.WriteLine($"Best eval found: {bestEval}");
                 break;
             }
+
+            Console.WriteLine($"Depth {searchDepth} time : {sw.ElapsedMilliseconds}ms");
+
+            // Save this as last iterations best move
             bestMove = bestMoveThisIteration;
+            bestEval = bestEvalThisIteration;
+            bestMoveThisIteration = new();
+            bestEvalThisIteration = -infinity;
             hasFoundOneMove = true;
         }
 
-        // In the case search is canceled before a good move is found, just return any move.
+        // In the case search is canceled before a good move is found
         if (!hasFoundOneMove)
         {
             Console.WriteLine("Best move not found!");
             return;
         }
 
-        OnSearchComplete?.Invoke(bestMoveThisIteration);
+        // Sanity
+        var legalMoves = MoveGenerator.GenerateLegalMoves(board);
+        if (!legalMoves.Contains(bestMove))
+        {
+            Console.WriteLine($"Illegal best move selected: {bestMove}");
+            bestMove = legalMoves[0]; // fallback
+        }
+
+        OnSearchComplete?.Invoke(bestMove);
+
+        OnSearchComplete?.Invoke(bestMove);
     }
 
     public void StopSearch()
@@ -64,15 +92,28 @@
         }
 
         // Get all available moves and order them
-        List<Move> moves = MoveGenerator.GenerateLegalMoves(board);
-        
+        List<Move> moves = MoveGenerator.GenerateLegalMoves(board); // Should be possible to use pseudolegal?
+        MoveOrder.OrderMoves(board, ref moves);
+
+        // If best move exists already, check that move first.
+        if (hasFoundOneMove && depthFromRoot == 0)
+        {
+            int idx = moves.IndexOf(bestMove);
+            if (idx > 0)
+            {
+                moves.RemoveAt(idx);
+                moves.Insert(0, bestMove);
+            }
+        }
+
         // Check if in check or stalemate
         if (moves.Count == 0)
         {
+            // This is temporary!
             return -10000;
         }
         
-        MoveOrder.OrderMoves(board, ref moves);
+        
 
         // Search moves
         for (int i = 0; i < moves.Count; i++)

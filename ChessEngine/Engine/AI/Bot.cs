@@ -91,7 +91,7 @@
         }
 
         // Mark captures, and their piece.
-        if (board.GetPiece(targetSquare) != Piece.None)
+        if (board.GetPiece(targetSquare) != Piece.None && flag != Move.Castle)
         {
             flag |= Move.PieceCapturedFlag;
             pieceCaptured = board.GetPiece(targetSquare);
@@ -128,7 +128,7 @@
         IsThinking = true;
         cancelSearchTimer?.Cancel();
 
-        StartSearch(maxThinkTimeMs);
+        StartSearch(int.MaxValue);
         
         
     }
@@ -174,7 +174,7 @@
     {
         while (!IsQuitting)
         {
-            searchWaitHandle.WaitOne();
+            searchWaitHandle.WaitOne(); // This hangs the thread here until canceled
             searcher.StartSearchDeepening();
         }
     }

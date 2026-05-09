@@ -3,10 +3,15 @@ using System.Diagnostics;
 
 public class PerftUtils
 {
+    Stopwatch sw;
+    public PerftUtils()
+    {
+        sw = new();
+    }
+
     public void PrintPerftResults(Board board, int depth)
     {
-        Stopwatch sw = new();
-        sw.Start();
+        sw.Restart();
         Console.WriteLine($"Found moves: {PerftTest(board, depth)}");
         Console.WriteLine($"Time searched: {sw.ElapsedMilliseconds}ms.");
         sw.Stop();
@@ -39,18 +44,19 @@ public class PerftUtils
         }
 
         int totalMoves = 0;
+        sw.Restart();
         List<Move> moves = MoveGenerator.GenerateLegalMoves(board);
 
         foreach (Move move in moves)
         {
             board.MakeMove(move);
             int movesCounted = PerftTest(board, depth - 1);
-            Console.WriteLine(move.ToString().Substring(0, 4) + ": " + movesCounted);
+            Console.WriteLine(move.ToUCIMoveString() + ": " + movesCounted);
             board.UnMakeMove(move);
             totalMoves += movesCounted;
         }
-
-        Console.WriteLine("Nodes searched: " + totalMoves);
+        sw.Stop();
+        Console.WriteLine($"Nodes searched: {totalMoves} Time: {sw.ElapsedMilliseconds}ms");
     }
 }
 

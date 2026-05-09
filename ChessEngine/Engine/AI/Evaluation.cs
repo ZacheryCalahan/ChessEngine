@@ -1,4 +1,6 @@
 ﻿
+using System.ComponentModel;
+
 public static class Evaluation
 {
     const int pawnValue = 100;
@@ -6,7 +8,7 @@ public static class Evaluation
     const int bishopValue = 300;
     const int rookValue = 500;
     const int queenValue = 900;
-    const int kingValue = 9999999; // Because we use psudolegal moves, best to assign this an insane value.
+    const int kingValue = 9999; // Because we use psudolegal moves, best to assign this an insane value.
 
     public static int Evaluate(Board board)
     {
@@ -19,8 +21,8 @@ public static class Evaluation
         bool isEnd = friendlyEval < (700 + kingValue);
 
         // Apply piece square table values
-        friendlyEval *= EvaluatePieceSquares(board, board.TurnColor, isEnd);
-        enemyEval *= EvaluatePieceSquares(board, board.OpponentTurnColor, isEnd);
+        friendlyEval += EvaluatePieceSquares(board, board.TurnColor, isEnd);
+        enemyEval += EvaluatePieceSquares(board, board.OpponentTurnColor, isEnd);
         
         // Return full eval
         eval = friendlyEval - enemyEval;
@@ -31,30 +33,15 @@ public static class Evaluation
     {
         int material = 0;
 
-        for (int i = 0; i < 64; i++)
-        {
-            // Search board for pieces
-            int piece = board.GetPiece(i);
-            int pieceColor = Piece.GetPieceColor(piece);
-            int pieceType = Piece.GetPieceType(piece);
+        // Iterate through each piece list
+        double pawnCountScale = (board.AllPieces[Piece.Pawn | color].Count / 8.0);
 
-            if (piece == Piece.None)
-                continue;
-
-            if (pieceColor != color)
-                continue;
-
-            material += pieceType switch
-            {
-                Piece.Pawn => pawnValue,
-                Piece.Knight => knightValue,
-                Piece.Bishop => bishopValue,
-                Piece.Rook => rookValue,
-                Piece.Queen => queenValue,
-                Piece.King => kingValue,
-                _ => 0
-            };
-        }
+        material += pawnValue * board.AllPieces[Piece.Pawn | color].Count;
+        material += (int) (knightValue * board.AllPieces[Piece.Knight | color].Count * pawnCountScale); // Scale this back in value as pawns are removed
+        material += bishopValue * board.AllPieces[Piece.Bishop | color].Count;
+        material += (int) (rookValue * board.AllPieces[Piece.Rook | color].Count * (1 - pawnCountScale)); // Scale this forward in value as pawns are removed.
+        material += queenValue * board.AllPieces[Piece.Queen | color].Count;
+        material += kingValue * board.AllPieces[Piece.King | color].Count; // This is solely for pseudo legal moves, because we CAN capture kings that way.
 
         return material;
     }
@@ -63,32 +50,25 @@ public static class Evaluation
     {
         int pieceSquareEval = 0;
 
-        for (int i = 0; i < 64; i++)
-        {
-            // Search board for pieces
-            int piece = board.GetPiece(i);
-            int pieceColor = Piece.GetPieceColor(piece);
-            int pieceType = Piece.GetPieceType(piece);
-            bool isWhite = pieceColor == Piece.White;
+        // Iterate through each piece list
+        bool IsWhiteSide = color == Piece.White ? true : false;
+        foreach (int square in board.AllPieces[Piece.Pawn | color])
+            pieceSquareEval += PieceSquare.GetScore(isEnd ? PieceSquare.Pawns : PieceSquare.PawnsEnd, square, IsWhiteSide);
 
-            if (piece == Piece.None)
-                continue;
+        foreach (int square in board.AllPieces[Piece.Knight | color])
+            pieceSquareEval += PieceSquare.GetScore(PieceSquare.Knights, square, IsWhiteSide);
 
-            if (pieceColor != color)
-                continue;
+        foreach (int square in board.AllPieces[Piece.Bishop | color])
+            pieceSquareEval += PieceSquare.GetScore(PieceSquare.Bishops, square, IsWhiteSide);
 
-            pieceSquareEval += pieceType switch
-            {
-                Piece.Pawn =>   PieceSquare.GetScore(isEnd ? PieceSquare.Pawns : PieceSquare.PawnsEnd, i, isWhite),
-                Piece.Knight => PieceSquare.GetScore(PieceSquare.Knights, i, isWhite),
-                Piece.Bishop => PieceSquare.GetScore(PieceSquare.Bishops, i, isWhite),
-                Piece.Rook =>   PieceSquare.GetScore(PieceSquare.Rooks, i, isWhite),
-                Piece.Queen =>  PieceSquare.GetScore(PieceSquare.Queens, i, isWhite),
-                Piece.King =>   PieceSquare.GetScore(PieceSquare.Kings, i, isWhite),
-                _ => 0
-            };
+        foreach (int square in board.AllPieces[Piece.Rook | color])
+            pieceSquareEval += PieceSquare.GetScore(PieceSquare.Rooks, square, IsWhiteSide);
 
-        }
+        foreach (int square in board.AllPieces[Piece.Queen | color])
+            pieceSquareEval += PieceSquare.GetScore(PieceSquare.Queens, square, IsWhiteSide);
+
+        foreach (int square in board.AllPieces[Piece.King | color])
+            pieceSquareEval += PieceSquare.GetScore(PieceSquare.Kings, square, IsWhiteSide);
 
         return pieceSquareEval;
     }

@@ -48,7 +48,7 @@ public static class MoveOrder
             Piece.Bishop => 301,
             Piece.Rook => 500,
             Piece.Queen => 900,
-            Piece.King => 9999999,
+            Piece.King => 9999,
             _ => 0
         };
     }

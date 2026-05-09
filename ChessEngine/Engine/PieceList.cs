@@ -1,5 +1,7 @@
 ﻿
-public class PieceList
+using System.Collections;
+
+public class PieceList : IEnumerable<int>
 {
     int pieceCount = 0;
     public int[] occupiedSquares;
@@ -34,6 +36,19 @@ public class PieceList
         int pieceIndex = map[startSquare];
         occupiedSquares[pieceIndex] = targetSquare;
         map[targetSquare] = pieceIndex;
+    }
+
+    public IEnumerator<int> GetEnumerator()
+    {
+        for (int i = 0; i < pieceCount; i++)
+        {
+            yield return occupiedSquares[i];
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return occupiedSquares.GetEnumerator();
     }
 
     public int this[int index] => occupiedSquares[index];

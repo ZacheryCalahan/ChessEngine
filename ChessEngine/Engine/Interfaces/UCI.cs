@@ -37,6 +37,7 @@ public static class UCI
                 case "stop": HandleStop(); break;
                 case "p": BoardUtils.PrintBoardChar(bot.board); break;
                 case "perft": PrintPerft(command); break;
+                case "bb": BoardUtils.PrintAllBitboards(bot.board); break;
                 case "quit": return; // Exit program
                 case "go": HandleGo(command); break;
                 _: continue;

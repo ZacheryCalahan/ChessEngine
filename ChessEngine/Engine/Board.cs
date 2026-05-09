@@ -11,7 +11,7 @@ public class Board
     ulong whitePieces = 0;
     ulong blackPieces = 0;
 
-    PieceList[] AllPieces;
+    public PieceList[] AllPieces { get; private set; }
 
     public Board()
     {
@@ -54,7 +54,7 @@ public class Board
         {
             int piece = board[i];
 
-            if (piece == 0)
+            if (piece == Piece.None)
                 continue;
 
             AllPieces[piece].AddPiece(i);
@@ -72,6 +72,28 @@ public class Board
         int movingPieceType = Piece.GetPieceType(movingPiece);
         GameState newState = CurrentGameState;
 
+        if (move.IsCastle)
+        {
+            int expectedRookSquare = targetSquare switch
+            {
+                6 => 7,
+                2 => 0,
+                62 => 63,
+                58 => 56,
+                _ => throw new InvalidDataException("Bad castle target")
+            };
+
+            if (Piece.GetPieceType(board[expectedRookSquare]) != Piece.Rook)
+            {
+                // Log the full game state HERE, only on the bad case
+                Console.WriteLine($"Castle attempted but rook not at {expectedRookSquare}");
+                Console.WriteLine($"Board state:");
+                BoardUtils.PrintBoardChar(this);
+                Console.WriteLine($"Castle rights: WK={CurrentGameState.WhiteKingsideCastle} WQ={CurrentGameState.WhiteQueensideCastle} BK={CurrentGameState.BlackKingsideCastle} BQ={CurrentGameState.BlackQueensideCastle}");
+            }
+        }
+
+
         /* Handle promotions */
         if (move.IsPromotion)
         {
@@ -80,6 +102,8 @@ public class Board
             int promotePiece = TurnColor | move.PromotionPieceType;
             bitboards[promotePiece] = Bitboard.SetSquare(bitboards[promotePiece], startSquare); // Add piece at position for promotion type
             board[startSquare] = promotePiece;
+            AllPieces[movingPiece].RemovePiece(startSquare);
+            AllPieces[promotePiece].AddPiece(startSquare);
 
             // Mark the moving piece as promotion piece
             movingPiece = promotePiece;
@@ -155,6 +179,7 @@ public class Board
                 bitboards[rookPiece] = Bitboard.SetSquare(bitboards[rookPiece], rookTarget); // Place at target
                 board[rookTarget] = rookPiece;
                 board[rookStart] = Piece.None;
+                AllPieces[rookPiece].MovePiece(rookStart, rookTarget);
             }
             else if (movingPieceType == Piece.King) // Clear castle rights of this color
             {
@@ -221,25 +246,28 @@ public class Board
 
             bitboards[capturedPawn] = Bitboard.RemoveSquare(bitboards[capturedPawn], capturedPieceLocation);
             board[capturedPieceLocation] = Piece.None;
+            AllPieces[capturedPawn].RemovePiece(capturedPieceLocation);
         }
 
         /* Update board states */
 
-        // Update bitboards
+        // Move the main piece
         bitboards[movingPiece] = Bitboard.RemoveSquare(bitboards[movingPiece], startSquare); // Remove piece from the start square (moved piece)
         bitboards[movingPiece] = Bitboard.SetSquare(bitboards[movingPiece], targetSquare); // Place piece at target location.
-        if (capturedPiece != 0) // Remove captured piece if capture
+        if (capturedPiece != 0)
+        { // Remove captured piece if capture
             bitboards[capturedPiece] = Bitboard.RemoveSquare(bitboards[capturedPiece], targetSquare);
-
-        // Update mailbox
+            AllPieces[capturedPiece].RemovePiece(targetSquare);
+        }
         board[targetSquare] = board[startSquare];
         board[startSquare] = Piece.None;
+        AllPieces[movingPiece].MovePiece(startSquare, targetSquare);
 
         // Update game state
         UpdateColorBitboards();
         IsWhiteTurn = !IsWhiteTurn;
 
-        if (movingPieceType != Piece.Pawn | move.IsCapture)
+        if (movingPieceType != Piece.Pawn || move.IsCapture)
             newState.FiftyMoveCount++;
         else
             newState.FiftyMoveCount = 0;
@@ -264,10 +292,12 @@ public class Board
         if (move.IsPromotion)
         {
             // Replace promoted piece with its pawn
-            bitboards[movedPiece] = Bitboard.RemoveSquare(bitboards[movedPiece], targetSquare); // Remove promoted piece
             int pawn = colorThatMoved | Piece.Pawn;
+            bitboards[movedPiece] = Bitboard.RemoveSquare(bitboards[movedPiece], targetSquare); // Remove promoted 
             bitboards[pawn] = Bitboard.SetSquare(bitboards[pawn], targetSquare);
             board[targetSquare] = pawn;
+            AllPieces[movedPiece].RemovePiece(targetSquare);
+            AllPieces[pawn].AddPiece(targetSquare);
             movedPiece = pawn;
         }
 
@@ -316,6 +346,7 @@ public class Board
             // Return rook back to its position
             bitboards[rookPiece] = Bitboard.RemoveSquare(bitboards[rookPiece], rookTarget);
             bitboards[rookPiece] = Bitboard.SetSquare(bitboards[rookPiece], rookStart);
+            AllPieces[rookPiece].MovePiece(rookTarget, rookStart);
             board[rookTarget] = Piece.None;
             board[rookStart] = rookPiece;
         }
@@ -329,6 +360,7 @@ public class Board
 
             bitboards[capturedPawn] = Bitboard.SetSquare(bitboards[capturedPawn], capturedPawnLocation);
             board[capturedPawnLocation] = capturedPawn;
+            AllPieces[capturedPawn].AddPiece(capturedPawnLocation);
         }
 
         /* Revert piece movement */
@@ -338,9 +370,10 @@ public class Board
         if (!move.IsEnpassantCapture && capturedPiece != 0) // Don't apply a pawn to the captured square if enpass, because the target is not where it was.
         {
             bitboards[capturedPiece] = Bitboard.SetSquare(bitboards[capturedPiece], targetSquare); // Replace captured piece
+            AllPieces[capturedPiece].AddPiece(targetSquare);
         }
+        AllPieces[movedPiece].MovePiece(targetSquare, startSquare);
 
-        
 
         // Update mailbox
         board[startSquare] = board[targetSquare];
@@ -411,16 +444,6 @@ public class Board
     }
 
     /* Private helpers */
-    void MovePiece(int piece, int startSquare, int targetSquare)
-    {
-        bitboards[piece] = Bitboard.RemoveSquare(bitboards[piece], startSquare);
-        bitboards[piece] = Bitboard.SetSquare(bitboards[piece], targetSquare);
-
-        board[startSquare] = Piece.None;
-        board[targetSquare] = piece;
-
-        AllPieces[piece].MovePiece(startSquare, targetSquare);
-    }
 
     void UpdateColorBitboards()
     {

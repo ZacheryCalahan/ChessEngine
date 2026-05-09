@@ -195,29 +195,28 @@ public static class MoveGenerator
 
     }
 
-    // This function is not efficient AT ALL, but since it's only used for perft and debugging, it hardly matters.
+    // This function is not efficient AT ALL, but since it's only intended to be used for perft and debugging, it hardly matters.
     public static List<Move> GenerateLegalMoves(Board board)
     {
         // Filter through these for illegal 
         List<Move> moves = new();
         List<Move> psuedolegalMoves = GeneratePsuedolegalMoves(board);
+        int friendlyColor = board.TurnColor; // Color of king to check attacks against
+        int enemyColor = board.OpponentTurnColor;
 
         foreach (Move moveToVerify in psuedolegalMoves)
         {
             board.MakeMove(moveToVerify);
-            
-            List<Move> opponentResp = GeneratePsuedolegalMoves(board);
-            
-            // Check if any opponent move would capture a king
-            if (opponentResp.Any(response => Piece.GetPieceType(board.GetPiece(response.TargetSquare)) == Piece.King))
+
+            ulong kingBitboard = Bitboard.SquareToBitboard(board.AllPieces[Piece.King | friendlyColor][0]);
+            ulong opponentAttacks = GenerateAllAttacksBitboard(board, enemyColor); // Generate all attacks of the opponent
+
+            // Check if any move would move into the opponent attacks
+            if ((opponentAttacks & kingBitboard) == 0)
             {
-                // Illegal move! Skip.
-            }
-            else
-            {
+                // King is not attacked, add move
                 moves.Add(moveToVerify);
             }
-
 
             board.UnMakeMove(moveToVerify);          
         }
@@ -229,54 +228,25 @@ public static class MoveGenerator
     {
         List<Move> moves = new();
 
-        for (int i = 0; i < 64; i++)
-        {
-            int piece = board.GetPiece(i);
-            
-            if (piece == 0) // Skip empty piece
-                continue;
+        // Iterate through each piece list
+        int colorToMove = board.TurnColor;
+        foreach (int square in board.AllPieces[Piece.Pawn | colorToMove])
+            moves.AddRange(GeneratePawnMoves(board, square));
 
-            if (!Piece.IsColor(piece, board.TurnColor)) // Skip opponent piece move generation
-                continue;
+        foreach (int square in board.AllPieces[Piece.Knight | colorToMove])
+            moves.AddRange(GenerateKnightMoves(board, square));
 
-            switch (Piece.GetPieceType(piece))
-            {
-                case (Piece.King):
-                {
-                    moves.AddRange(GenerateKingMoves(board, i));
-                    break;
-                }   
-                case (Piece.Rook):
-                {
-                    moves.AddRange(GenerateSlidingMoves(board, i));
-                    break;
-                }
-                case (Piece.Bishop):
-                {
-                    moves.AddRange(GenerateSlidingMoves(board, i));
-                    break;
-                }
-                case (Piece.Queen):
-                {
-                    moves.AddRange(GenerateSlidingMoves(board, i));
-                    break;
-                }
-                case (Piece.Knight):
-                {
-                    moves.AddRange(GenerateKnightMoves(board, i));
-                    break;
-                }
-                case (Piece.Pawn):
-                {
-                    moves.AddRange(GeneratePawnMoves(board, i));
-                    break;
-                }
-                default:
-                {
-                    throw new InvalidDataException($"Piece {piece} does not exist.");
-                }
-            }                
-        }
+        foreach (int square in board.AllPieces[Piece.Bishop | colorToMove])
+            moves.AddRange(GenerateSlidingMoves(board, square));
+
+        foreach (int square in board.AllPieces[Piece.Rook | colorToMove])
+            moves.AddRange(GenerateSlidingMoves(board, square));
+
+        foreach (int square in board.AllPieces[Piece.Queen | colorToMove])
+            moves.AddRange(GenerateSlidingMoves(board, square));
+
+        foreach (int square in board.AllPieces[Piece.King | colorToMove])
+            moves.AddRange(GenerateKingMoves(board, square));
 
         return moves;
     }
@@ -717,6 +687,31 @@ public static class MoveGenerator
 
         // Prune of self captures
         attacks = Bitboard.Prune(attacks, friendlyPieces);
+
+        return attacks;
+    }
+
+    public static ulong GenerateAllAttacksBitboard(Board board, int color)
+    {
+        ulong attacks = 0;
+
+        foreach (int square in board.AllPieces[Piece.Pawn | color])
+            attacks |= GeneratePawnAttackBitboard(board, square);
+
+        foreach (int square in board.AllPieces[Piece.Knight | color])
+            attacks |= GenerateKnightAttackBitboard(board, square);
+
+        foreach (int square in board.AllPieces[Piece.Bishop | color])
+            attacks |= GenerateSlidingAttackBitboard(board, square);
+
+        foreach (int square in board.AllPieces[Piece.Rook | color])
+            attacks |= GenerateSlidingAttackBitboard(board, square);
+
+        foreach (int square in board.AllPieces[Piece.Queen | color])
+            attacks |= GenerateSlidingAttackBitboard(board, square);
+
+        foreach (int square in board.AllPieces[Piece.King | color])
+            attacks |= GenerateKingAttackBitboard(board, square);
 
         return attacks;
     }
