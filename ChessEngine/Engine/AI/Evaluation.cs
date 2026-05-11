@@ -8,7 +8,7 @@ public static class Evaluation
     const int bishopValue = 300;
     const int rookValue = 500;
     const int queenValue = 900;
-    const int kingValue = 9999; // Because we use psudolegal moves, best to assign this an insane value.
+    const int kingValue = 99999; // Because we could possibly use psudolegal moves, best to assign this an insane value. This naturally cancels out in eval unless it can be captured.
 
     public static int Evaluate(Board board)
     {
@@ -18,12 +18,24 @@ public static class Evaluation
         int friendlyEval = MaterialCount(board, board.TurnColor);
         int enemyEval = MaterialCount(board, board.OpponentTurnColor);
 
-        bool isEnd = friendlyEval < (700 + kingValue);
+        bool isEnd = friendlyEval < (2100 + kingValue); // Consider end game when friendly piece count is low (I used one king, 4 pawns, and one queen as bounds)
 
         // Apply piece square table values
         friendlyEval += EvaluatePieceSquares(board, board.TurnColor, isEnd);
         enemyEval += EvaluatePieceSquares(board, board.OpponentTurnColor, isEnd);
-        
+
+        // Apply an incentive to finding positions with checks, and discourage positions that put you in check.
+        if (board.IsInCheck())
+        {
+            enemyEval += 100;
+            friendlyEval -= 100;
+        }
+        else if (board.IsEnemyInCheck())
+        {
+            friendlyEval += 100;
+            enemyEval -= 100;
+        }
+
         // Return full eval
         eval = friendlyEval - enemyEval;
         return eval;
