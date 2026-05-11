@@ -3,16 +3,15 @@ using System.ComponentModel;
 
 public static class MoveGenerator
 {
-    // Tables for move types (don't generate the pawns, the rules are too complex.)
-    static ulong[,] PawnMoves = new ulong[2, 64]; // Moves of the pawn
-    static ulong[,] PawnAttacks = new ulong[2, 64]; // Captures of the pawn
-    static ulong[] KingAttacks = new ulong[64];
-    static ulong[] KnightAttacks = new ulong[64];
-    static ulong[] OrthogonalAttacks = new ulong[64];
-    static ulong[] DiagonalAttacks = new ulong[64];
-    static ulong[] OmniAttacks = new ulong[64];
-    public static ulong[,] RayAttacks = new ulong[8, 64]; // Array of attacks by direction
-
+    // Tables for move types
+    static readonly ulong[,] PawnMoves = new ulong[2, 64]; // Moves of the pawn
+    static readonly ulong[,] PawnAttacks = new ulong[2, 64]; // Captures of the pawn
+    static readonly ulong[] KingAttacks = new ulong[64];
+    static readonly ulong[] KnightAttacks = new ulong[64];
+    static readonly ulong[] OrthogonalAttacks = new ulong[64];
+    static readonly ulong[] DiagonalAttacks = new ulong[64];
+    static readonly ulong[] OmniAttacks = new ulong[64];
+    public static readonly ulong[,] RayAttacks = new ulong[8, 64]; // Array of attacks by direction
 
     static readonly ulong WhiteKingsideCastlePath = 0x60;
     static readonly ulong WhiteQueensideCastlePath = 0xE;
@@ -196,11 +195,11 @@ public static class MoveGenerator
     }
 
     // This function is not efficient AT ALL, but since it's only intended to be used for perft and debugging, it hardly matters.
-    public static List<Move> GenerateLegalMoves(Board board)
+    public static List<Move> GenerateLegalMoves(Board board, bool quietOnly = false, bool capturesOnly = false)
     {
         // Filter through these for illegal 
         List<Move> moves = new();
-        List<Move> psuedolegalMoves = GeneratePsuedolegalMoves(board);
+        List<Move> psuedolegalMoves = GeneratePsuedolegalMoves(board, quietOnly, capturesOnly);
         int friendlyColor = board.TurnColor; // Color of king to check attacks against
         int enemyColor = board.OpponentTurnColor;
 
@@ -211,7 +210,7 @@ public static class MoveGenerator
             ulong kingBitboard = Bitboard.SquareToBitboard(board.AllPieces[Piece.King | friendlyColor][0]);
             ulong opponentAttacks = GenerateAllAttacksBitboard(board, enemyColor); // Generate all attacks of the opponent
 
-            // Check if any move would move into the opponent attacks
+            // Check if any move would put king in check
             if ((opponentAttacks & kingBitboard) == 0)
             {
                 // King is not attacked, add move
@@ -224,34 +223,34 @@ public static class MoveGenerator
         return moves;
     }
 
-    public static List<Move> GeneratePsuedolegalMoves(Board board)
+    public static List<Move> GeneratePsuedolegalMoves(Board board, bool quietOnly = false, bool capturesOnly = false)
     {
         List<Move> moves = new();
 
         // Iterate through each piece list
         int colorToMove = board.TurnColor;
         foreach (int square in board.AllPieces[Piece.Pawn | colorToMove])
-            moves.AddRange(GeneratePawnMoves(board, square));
+            moves.AddRange(GeneratePawnMoves(board, square, quietOnly, capturesOnly));
 
         foreach (int square in board.AllPieces[Piece.Knight | colorToMove])
-            moves.AddRange(GenerateKnightMoves(board, square));
+            moves.AddRange(GenerateKnightMoves(board, square, quietOnly, capturesOnly));
 
         foreach (int square in board.AllPieces[Piece.Bishop | colorToMove])
-            moves.AddRange(GenerateSlidingMoves(board, square));
+            moves.AddRange(GenerateSlidingMoves(board, square, quietOnly, capturesOnly));
 
         foreach (int square in board.AllPieces[Piece.Rook | colorToMove])
-            moves.AddRange(GenerateSlidingMoves(board, square));
+            moves.AddRange(GenerateSlidingMoves(board, square, quietOnly, capturesOnly));
 
         foreach (int square in board.AllPieces[Piece.Queen | colorToMove])
-            moves.AddRange(GenerateSlidingMoves(board, square));
+            moves.AddRange(GenerateSlidingMoves(board, square, quietOnly, capturesOnly));
 
         foreach (int square in board.AllPieces[Piece.King | colorToMove])
-            moves.AddRange(GenerateKingMoves(board, square));
+            moves.AddRange(GenerateKingMoves(board, square, quietOnly, capturesOnly));
 
         return moves;
     }
 
-    public static List<Move> GenerateKingMoves(Board board, int location)
+    public static List<Move> GenerateKingMoves(Board board, int location, bool quietOnly = false, bool capturesOnly = false)
     {
         List<Move> moves = new();
 
@@ -275,7 +274,7 @@ public static class MoveGenerator
         moveBitboard = Bitboard.Prune(moveBitboard, attacks);
 
         // Add each non-capture move
-        while (moveBitboard != 0)
+        while (moveBitboard != 0 && !capturesOnly)
         {
             int target = Bitboard.LSBToSquare(moveBitboard); // Get target square
             moves.Add(new Move(location, target));
@@ -283,7 +282,7 @@ public static class MoveGenerator
         }
 
         // Add each capture move
-        while (attacks != 0)
+        while (attacks != 0 && !quietOnly)
         {
             int target = Bitboard.LSBToSquare(attacks); // Get target square
             moves.Add(new Move(location, target, Move.PieceCapturedFlag, board.GetPiece(target)));
@@ -292,7 +291,7 @@ public static class MoveGenerator
 
         // Add castling moves
         // Determine if rights are had
-        if (board.HasCastleRight(pieceColor))
+        if (board.HasCastleRight(pieceColor) && !capturesOnly)
         {
             ulong attackedSquares = GenerateAttackedBitboard(board);
             ulong kingBitboard = Bitboard.SquareToBitboard(location);
@@ -330,7 +329,7 @@ public static class MoveGenerator
         return moves;
     }
 
-    public static List<Move> GenerateSlidingMoves(Board board, int location)
+    public static List<Move> GenerateSlidingMoves(Board board, int location, bool quietOnly = false, bool capturesOnly = false)
     {
         List<Move> moves = new();
 
@@ -352,16 +351,16 @@ public static class MoveGenerator
         ulong attacks = Bitboard.Intersection(enemyPieces, moveBitboard);
         moveBitboard = Bitboard.Prune(moveBitboard, attacks);
 
-        // Convert to moves
-        while (moveBitboard != 0)
+        // Convert to moves (unless searching for captures only)
+        while (moveBitboard != 0 && !capturesOnly)
         {
             int target = Bitboard.LSBToSquare(moveBitboard);
             moves.Add(new Move(location, target));
             moveBitboard = Bitboard.PopLSB(moveBitboard);
         }
 
-        // Convert to capture moves
-        while (attacks != 0)
+        // Convert to capture moves (unless we're doing a quiet search)
+        while (attacks != 0 && !quietOnly) 
         {
             int target = Bitboard.LSBToSquare(attacks);
             moves.Add(new Move(location, target, Move.PieceCapturedFlag, board.GetPiece(target)));
@@ -371,7 +370,7 @@ public static class MoveGenerator
         return moves;
     }
 
-    public static List<Move> GenerateKnightMoves(Board board, int location)
+    public static List<Move> GenerateKnightMoves(Board board, int location, bool quietOnly = false, bool capturesOnly = false)
     {
         List<Move> moves = new();
 
@@ -394,7 +393,7 @@ public static class MoveGenerator
         moveBitboard = Bitboard.Prune(moveBitboard, attacks);
 
         // Add each non-capture move
-        while (moveBitboard != 0)
+        while (moveBitboard != 0 && !capturesOnly)
         {
             int target = Bitboard.LSBToSquare(moveBitboard);
             moves.Add(new Move(location, target));
@@ -402,7 +401,7 @@ public static class MoveGenerator
         }
 
         // Add each capture move
-        while (attacks != 0)
+        while (attacks != 0 && !quietOnly)
         {
             int target = Bitboard.LSBToSquare(attacks);
             moves.Add(new Move(location, target, Move.PieceCapturedFlag, board.GetPiece(target)));
@@ -412,7 +411,7 @@ public static class MoveGenerator
         return moves;
     }
 
-    public static List<Move> GeneratePawnMoves(Board board, int location)
+    public static List<Move> GeneratePawnMoves(Board board, int location, bool quietOnly = false, bool capturesOnly = false)
     {
         List<Move> moves = new();
 
@@ -447,7 +446,7 @@ public static class MoveGenerator
         {
             moveBitboard = 0;
         }
-        else
+        else if (!capturesOnly) // Check double push ONLY if we're not searching for captures only.
         { // Possibly change this to mailbox approach, as this may be too much.
             moveBitboard = Bitboard.Intersection(moveBitboard, forwardMask);
             int doubleForward = pieceColor == Piece.White ? location + 16 : location - 16;
@@ -466,7 +465,7 @@ public static class MoveGenerator
         
 
         // Add non-capture moves
-        while (moveBitboard != 0)
+        while (moveBitboard != 0 && !capturesOnly)
         {
             int target = Bitboard.LSBToSquare(moveBitboard);
             // Check if move targets the back rank
@@ -485,7 +484,7 @@ public static class MoveGenerator
         }
 
         // Add capturing moves
-        while (attacks != 0)
+        while (attacks != 0 && !quietOnly)
         {
             int target = Bitboard.LSBToSquare(attacks);
             // Check if move targets the back rank
@@ -512,7 +511,7 @@ public static class MoveGenerator
         }        
 
         // Add enpassant moves
-        while (enpassantAttacks != 0)
+        while (enpassantAttacks != 0 && !quietOnly)
         {
             int target = Bitboard.LSBToSquare(enpassantAttacks);
             int pawnType = colorIndex == 0 ? Piece.BlackPawn : Piece.WhitePawn;

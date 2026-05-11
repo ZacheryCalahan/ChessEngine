@@ -35,6 +35,9 @@
 
     public void MakeMove(string moveString)
     {
+        while (IsThinking)
+        { } // Hang until ready to mutate the board
+
         int startSquare = 0;
         int targetSquare = 0;
 
