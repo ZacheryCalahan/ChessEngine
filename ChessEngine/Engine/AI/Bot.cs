@@ -110,7 +110,7 @@
         int myTimeInc = board.IsWhiteTurn ? winc : binc;
 
         // Use slice of time
-        double thinkTimeMs = myTime / 40.0;
+        double thinkTimeMs = (myTime / 25.0) + (myTimeInc / 2);
 
         // Base time
         thinkTimeMs = Math.Min(maxThinkTimeMs, thinkTimeMs);

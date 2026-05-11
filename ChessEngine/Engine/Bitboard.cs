@@ -1,5 +1,6 @@
 ﻿
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 public static class Bitboard
@@ -37,6 +38,8 @@ public static class Bitboard
     public static ulong XOR(ulong a, ulong b) => a ^ b;
 
     public static ulong Prune(ulong a, ulong b) => a & ~b;
+
+    public static int BitCount(ulong a) => BitOperations.PopCount(a);
 
     /* Bit finding/manipulation functions */
 

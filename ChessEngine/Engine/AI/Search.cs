@@ -11,6 +11,9 @@ public class Search
     volatile bool searchCanceled;
     bool hasFoundOneMove;
 
+    int whiteMoveCount = 0; // Fed into the Eval function to determine mobility.
+    int blackMoveCount = 0;
+
     Move bestMoveThisIteration; // This is the best move found within a single iteration
     int bestEvalThisIteration;
     Move bestMove; // This is the best move found within the search
@@ -106,6 +109,11 @@ public class Search
         // Get all available moves and order them
         List<Move> moves = MoveGenerator.GenerateLegalMoves(board);
         MoveOrder.OrderMoves(board, ref moves);
+        int moveCount = moves.Count; // For mobility
+        if (board.IsWhiteTurn)
+            whiteMoveCount = moveCount;
+        else
+            blackMoveCount = moveCount;
 
         // If best move exists already, check that move first. (swap the moves for now?)
         if (hasFoundOneMove && depthFromRoot == 0)
@@ -174,7 +182,7 @@ public class Search
             return 0;
         }
 
-        int eval = Evaluation.Evaluate(board); // Captures aren't forced, ensure that bad captures don't overtake good non-captures.
+        int eval = Evaluation.Evaluate(board, whiteMoveCount, blackMoveCount); // Captures aren't forced, ensure that bad captures don't overtake good non-captures.
 
         if (eval >= beta)
         {
@@ -188,6 +196,11 @@ public class Search
 
         List<Move> moves = MoveGenerator.GenerateLegalMoves(board, false, true);
         MoveOrder.OrderMoves(board, ref moves);
+        int moveCount = moves.Count; // For mobility
+        if (board.IsWhiteTurn)
+            whiteMoveCount = moveCount;
+        else
+            blackMoveCount = moveCount;
 
         for (int i = 0; i < moves.Count; i++)
         {

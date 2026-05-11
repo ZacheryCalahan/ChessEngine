@@ -4,13 +4,13 @@ using System.ComponentModel;
 public static class Evaluation
 {
     const int pawnValue = 100;
-    const int knightValue = 300;
-    const int bishopValue = 300;
+    const int knightValue = 320;
+    const int bishopValue = 330;
     const int rookValue = 500;
     const int queenValue = 900;
     const int kingValue = 99999; // Because we could possibly use psudolegal moves, best to assign this an insane value. This naturally cancels out in eval unless it can be captured.
 
-    public static int Evaluate(Board board)
+    public static int Evaluate(Board board, int whiteMoveCount = 0, int blackMoveCount = 0)
     {
         int eval = 0;
 
@@ -35,6 +35,10 @@ public static class Evaluation
             friendlyEval += 100;
             enemyEval -= 100;
         }
+
+        // Apply a mobility bonus (This should also double as good (and quick) way to measure the number of attacked squares)
+        friendlyEval += (((board.TurnColor == Piece.White) ? whiteMoveCount : blackMoveCount) / 218) * 300; // Adds (moves / most legal moves) / 3x centipawn
+        enemyEval += (((board.TurnColor == Piece.White) ? blackMoveCount : whiteMoveCount) / 218) * 300;
 
         // Return full eval
         eval = friendlyEval - enemyEval;
