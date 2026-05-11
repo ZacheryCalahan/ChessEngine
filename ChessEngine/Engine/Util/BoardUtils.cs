@@ -96,12 +96,13 @@ public static class BoardUtils
 
     public static int FileIndex(int square)
     {
-        return square >> 3;
+        return square & 0b111;
     }
 
     public static int RankIndex(int square)
     {
-        return square & 0b111;
+        return square >> 3;
+        
     }
 
 }
