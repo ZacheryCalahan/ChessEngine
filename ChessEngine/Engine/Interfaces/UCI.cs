@@ -31,15 +31,18 @@ public static class UCI
                 case "isready": Console.WriteLine("readyok"); break;
                 case "position": HandlePosition(command); break;
                 case "ucinewgame": bot.board.ImportBoard(); break;
-                case "debug": break;
                 case "setoption": break;
                 case "register": break;
                 case "stop": HandleStop(); break;
-                case "p": BoardUtils.PrintBoardChar(bot.board); break;
-                case "perft": PrintPerft(command); break;
-                case "bb": BoardUtils.PrintAllBitboards(bot.board); break;
                 case "quit": return; // Exit program
                 case "go": HandleGo(command); break;
+
+                // Non-standard
+                case "debug": break;
+                case "d": BoardUtils.PrintBoardChar(bot.board); break;
+                case "perft": PrintPerft(command); break;
+                case "bb": BoardUtils.PrintAllBitboards(bot.board); break;
+                case "fen": Console.WriteLine(bot.board.ExportFen());
                 _: continue;
             }
         }
@@ -54,6 +57,11 @@ public static class UCI
 
     static void HandlePosition(string message)
     {
+        while (bot.IsThinking)
+        {
+            // While thinking, search may change the state of the board. Ensure to never change board when the search is active.
+        }
+
         if (message.ToLower().Contains("startpos"))
         {
             bot.NewBoard();
@@ -121,7 +129,7 @@ public static class UCI
 
     static void HandleGo(string message)
     {
-        if (message.Contains("time"))
+        if (message.Contains("wtime"))
         {
             // Parse and pass time here
             int wtime = TryGetLabeledInt(message, "wtime");
@@ -131,6 +139,11 @@ public static class UCI
 
             int thinkTime = bot.DetermineThinkTime(wtime, btime, winc, binc);
             bot.ThinkTimed(thinkTime);
+        }
+        else if (message.Contains("movetime"))
+        {
+            int movetime = TryGetLabeledInt(message, "movetime");
+            bot.ThinkTimed(movetime - 100); // 100 extra ms to respond after thinking.
         }
         else
         {

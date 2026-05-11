@@ -11,6 +11,8 @@ public class Board
     ulong whitePieces = 0;
     ulong blackPieces = 0;
 
+    int TotalMoves = 0;
+
     public PieceList[] AllPieces { get; private set; }
 
     public Board()
@@ -59,6 +61,85 @@ public class Board
 
             AllPieces[piece].AddPiece(i);
         }
+
+        TotalMoves = pos.moveCount;
+
+        //Console.WriteLine($"{ExportFen()} imported.");
+    }
+
+    public string ExportFen()
+    {
+        string fen = "";
+
+        // Position
+        for (int rank = 7; rank >= 0; rank--)
+        {
+            int numEmptyFiles = 0;
+            for (int file = 0; file < 8; file++)
+            {
+                int i = rank * 8 + file;
+                int piece = board[i];
+                if (piece != 0)
+                {
+                    if (numEmptyFiles != 0)
+                    {
+                        fen += numEmptyFiles;
+                        numEmptyFiles = 0;
+                    }
+
+                    fen += Piece.ToChar(piece);
+                }
+                else
+                {
+                    numEmptyFiles++;
+                }
+            }
+
+            if (numEmptyFiles != 0)
+            {
+                fen += numEmptyFiles;
+            }
+            if (rank != 0)
+            {
+                fen += '/';
+            }
+        }
+
+        // Turn
+        fen += ' ';
+        fen += (IsWhiteTurn) ? 'w' : 'b';
+
+        // Castling
+        fen += ' ';
+        if (HasCastleRight(Piece.White) || HasCastleRight(Piece.Black))
+        {
+            fen += (KingsideCastleRight(Piece.White)) ? "K" : "";
+            fen += (QueensideCastleRight(Piece.White)) ? "Q" : "";
+            fen += (KingsideCastleRight(Piece.Black)) ? "k" : "";
+            fen += (QueensideCastleRight(Piece.Black)) ? "q" : "";
+        }
+        else
+        {
+            fen += '-'; // No castling rights
+        }
+        
+
+        // En passant
+        fen += ' ';
+        if (CurrentGameState.EnPassantSquare != 0)
+            fen += BoardUtils.SquareToString(CurrentGameState.EnPassantSquare);
+        else
+            fen += '-';
+
+        // 50 Move Rule
+        fen += ' ';
+        fen += CurrentGameState.FiftyMoveCount;
+
+        // Total Moves
+        fen += ' ';
+        fen += TotalMoves;
+
+        return fen;
     }
 
     public void MakeMove(Move move)
@@ -249,8 +330,6 @@ public class Board
             AllPieces[capturedPawn].RemovePiece(capturedPieceLocation);
         }
 
-        /* Update board states */
-
         // Move the main piece
         bitboards[movingPiece] = Bitboard.RemoveSquare(bitboards[movingPiece], startSquare); // Remove piece from the start square (moved piece)
         bitboards[movingPiece] = Bitboard.SetSquare(bitboards[movingPiece], targetSquare); // Place piece at target location.
@@ -265,6 +344,10 @@ public class Board
 
         // Update game state
         UpdateColorBitboards();
+
+        if (!IsWhiteTurn)
+            TotalMoves++;
+
         IsWhiteTurn = !IsWhiteTurn;
 
         if (movingPieceType != Piece.Pawn || move.IsCapture)
@@ -384,6 +467,9 @@ public class Board
 
         UpdateColorBitboards();
 
+        if (IsWhiteTurn)
+            TotalMoves--;
+
         /* Revert the board state */
         CurrentGameState = oldGameState;
         IsWhiteTurn = !IsWhiteTurn;
@@ -400,6 +486,22 @@ public class Board
 
     public bool QueensideCastleRight(int color) => color == Piece.White ? CurrentGameState.WhiteQueensideCastle : CurrentGameState.BlackQueensideCastle;
     
+    public bool IsInCheck()
+    {
+        ulong kingBitboard = Bitboard.SquareToBitboard(AllPieces[Piece.King | TurnColor][0]);
+        ulong opponentAttacks = MoveGenerator.GenerateAllAttacksBitboard(this, OpponentTurnColor); // Generate all attacks of the opponent
+
+        return (kingBitboard & opponentAttacks) != 0;
+    }
+
+    public bool IsEnemyInCheck()
+    {
+        ulong kingBitboard = Bitboard.SquareToBitboard(AllPieces[Piece.King | OpponentTurnColor][0]); // Enemy king
+        ulong friendlyAttacks = MoveGenerator.GenerateAllAttacksBitboard(this, TurnColor);
+
+        return (kingBitboard & friendlyAttacks) != 0;
+    }
+
     /* Piece retrieval */
 
     public int GetPiece(int square)
