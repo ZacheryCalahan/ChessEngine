@@ -100,11 +100,22 @@ public class Search
             return 0;
         }
 
-        if (depth == 0) // Depth remaining
+        // End of the chain
+        if (depth == 0) 
         {
             // Should do a quiescence search here. (search non-captures)
             return QuiescenceSearch(alpha, beta);
         }
+
+        // 50 move rule draw
+        if (depthFromRoot > 0)
+        {
+            if (board.CurrentGameState.FiftyMoveCount >= 100)
+            {
+                return 0;
+            }
+        }
+        
 
         // Get all available moves and order them
         List<Move> moves = MoveGenerator.GenerateLegalMoves(board);
@@ -142,7 +153,17 @@ public class Search
             Move move = moves[i];
 
             board.MakeMove(moves[i]);
-            int eval = -SearchMoves(depth - 1, -beta, -alpha, depthFromRoot + 1);
+            // Reduce the depth of the search for less interesting moves
+            int eval = 0;
+            if (depth >= 3 && i >= 8 && !move.IsCapture)
+            {
+                eval = -SearchMoves(depth - 2, -beta, -alpha, depthFromRoot + 1);
+            }
+            else
+            {
+                eval = -SearchMoves(depth - 1, -beta, -alpha, depthFromRoot + 1);
+            }
+            
             board.UnMakeMove(moves[i]);
 
             if (searchCanceled)
