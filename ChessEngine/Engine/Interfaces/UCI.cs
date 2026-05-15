@@ -16,8 +16,9 @@ public static class UCI
         // Notify GUI we're in UCI mode
         GiveId();
 
-        // Ensure magic bitboards are generated
+        // Ensure magic bitboards are generated BEFORE a move gen call.
         MagicBitboard.Init();
+
         // Command parsing
         while (true)
         {
@@ -41,11 +42,11 @@ public static class UCI
 
                 // Non-standard
                 case "debug": break;
-                case "d": BoardUtils.PrintBoardChar(bot.board); break;
+                case "d": PrintBoard(); break;
                 case "perft": PrintPerft(command); break;
                 case "bb": BoardUtils.PrintAllBitboards(bot.board); break;
-                case "fen": Console.WriteLine(bot.board.ExportFen());
-                _: continue;
+                case "magics": MagicDebugger(); break;
+                default: continue;
             }
         }
     }
@@ -55,6 +56,31 @@ public static class UCI
         Console.WriteLine("id name Zac's Chess Bot");
         Console.WriteLine("id author Zac Calahan");
         Console.WriteLine("uciok");
+    }
+
+    static void MagicDebugger()
+    {
+        try
+        {
+            int square = bot.board.AllPieces[Piece.WhiteQueen][0];
+            ulong queenAttacks = MagicBitboard.GetDiagAttacks(square, bot.board.GetOccupancyBitboard());
+            queenAttacks |= MagicBitboard.GetOrthoAttacks(square, bot.board.GetOccupancyBitboard());
+            Console.WriteLine("Output of first white queen attacks: ");
+            Console.WriteLine(Bitboard.ToStringMarker(queenAttacks, square));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("No white queen found.");
+            return;
+        }
+        
+        Console.WriteLine();
+    }
+
+    static void PrintBoard()
+    {
+        BoardUtils.PrintBoardChar(bot.board);
+        Console.WriteLine($"\n FEN: {bot.board.ExportFen()}");
     }
 
     static void HandlePosition(string message)
