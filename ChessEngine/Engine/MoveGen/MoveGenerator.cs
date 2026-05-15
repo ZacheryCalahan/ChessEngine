@@ -427,8 +427,6 @@ public static class MoveGenerator
         ulong occupiedSquares = board.GetOccupancyBitboard();
         int colorIndex = pieceColor == Piece.White ? 0 : 1;
 
-
-
         // Get attacks
         ulong attacks = GeneratePawnAttackBitboard(board, location);
 
@@ -584,43 +582,19 @@ public static class MoveGenerator
     {
         ulong attacks = 0;
 
-        // Useful values
         int piece = board.GetPiece(location);
-        int pieceType = Piece.GetPieceType(piece);
-        int pieceColor = Piece.GetPieceColor(piece);
-        ulong friendlyPieces = pieceColor == Piece.White ?
-            board.GetWhiteBitboard() :
-            board.GetBlackBitboard();
-        ulong occupiedSquares = board.GetOccupancyBitboard();
+        bool isDiag = Piece.IsDiagonalPiece(piece);
+        bool isOrth = Piece.IsOrthogonalPiece(piece);
+        ulong occupiedBitboard = board.GetOccupancyBitboard();
+        ulong friendlyPieces = board.GetFriendlyBitboard();
 
-        int rayStart = pieceType == Piece.Bishop ? 1 : 0;
-        int rayIncrement = pieceType == Piece.Queen ? 1 : 2;
+        if (isDiag)
+            attacks |= MagicBitboard.GetDiagAttacks(location, occupiedBitboard);
+        if (isOrth)
+            attacks |= MagicBitboard.GetOrthoAttacks(location, occupiedBitboard);
 
-        for (int i = rayStart; i < 8; i += rayIncrement)
-        {
-            ulong path = RayAttacks[i, location];
-            ulong blockers = Bitboard.Intersection(path, occupiedSquares);
-
-            if (blockers == 0)
-            {
-                // Add entire path
-                attacks |= path;
-                continue;
-            }
-
-            // Handle blocking pieces
-            int first_blocking_square = 0;
-            if (IsDirPositive((Dir) i))
-                first_blocking_square = Bitboard.LSBToSquare(blockers);
-            else
-                first_blocking_square = Bitboard.MSBToSquare(blockers);
-
-            attacks |= path ^ RayAttacks[i, first_blocking_square];
-
-            // Prune of self captures
-            attacks = Bitboard.Prune(attacks, friendlyPieces);
-        }
-        
+        // Remove attacks on own pieces
+        attacks = Bitboard.Prune(attacks, friendlyPieces);
 
         return attacks;
     }

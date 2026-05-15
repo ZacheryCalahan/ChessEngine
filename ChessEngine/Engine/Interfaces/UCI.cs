@@ -16,6 +16,8 @@ public static class UCI
         // Notify GUI we're in UCI mode
         GiveId();
 
+        // Ensure magic bitboards are generated
+        MagicBitboard.Init();
         // Command parsing
         while (true)
         {
