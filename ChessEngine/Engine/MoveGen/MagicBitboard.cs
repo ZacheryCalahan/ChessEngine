@@ -8,8 +8,6 @@ public static class MagicBitboard
     public static readonly ulong[][] OrthoAttacks;
     public static readonly ulong[][] DiagAttacks;
 
-    const ulong innerSquareMask = 0x7e7e7e7e7e7e00;
-
     static MagicBitboard()
     {
         // Initialize the masks
@@ -17,8 +15,8 @@ public static class MagicBitboard
         DiagMask = new ulong[64];
         for (int i = 0; i < 64; i++)
         {
-            OrthoMask[i] = CreateMovementMaskOrtho(i);
-            DiagMask[i] = CreateMovementMaskDiag(i);
+            OrthoMask[i] = CreateMovementMaskOrtho(i, 0, true);
+            DiagMask[i] = CreateMovementMaskDiag(i, 0, true);
         }
 
         // Initialize the attacks
@@ -105,7 +103,9 @@ public static class MagicBitboard
         return mask;
     }
 
-    static ulong CreateMovementMaskOrtho(int square, ulong blockers = 0)
+    // Populate all the possible movements, and optionally each movement with blockers.
+    public static ulong CreateMovementMaskOrtho(int square, ulong blockers = 0, bool relevancyMask = false)
+    
     {
         ulong mask = 0;
 
@@ -115,6 +115,18 @@ public static class MagicBitboard
             mask |= EastRay(square);
             mask |= SouthRay(square);
             mask |= WestRay(square);
+
+            if (relevancyMask)
+            {
+                ulong relevantMask = 0;
+                relevantMask |= Bitboard.MSB(NorthRay(square));
+                relevantMask |= Bitboard.MSB(EastRay(square));
+                relevantMask |= Bitboard.LSB(SouthRay(square));
+                relevantMask |= Bitboard.LSB(WestRay(square));
+
+                mask &= ~relevantMask;
+            }
+
             return mask;
         }
 
@@ -130,21 +142,41 @@ public static class MagicBitboard
 
         if (northBlockedSquare != 64)
             mask |= NorthRay(square) ^ NorthRay(northBlockedSquare);
+        else
+            mask |= NorthRay(square);
 
         if (eastBlockedSquare != 64)
             mask |= EastRay(square) ^ EastRay(eastBlockedSquare);
+        else
+            mask |= EastRay(square);
 
         if (southBlockedSquare != -1)
             mask |= SouthRay(square) ^ SouthRay(southBlockedSquare);
+        else
+            mask |= SouthRay(square);
 
         if (westBlockedSquare != -1)
             mask |= WestRay(square) ^ WestRay(westBlockedSquare);
+        else
+            mask |= WestRay(square);
+
+        if (relevancyMask)
+        {
+            ulong relevantMask = 0;
+            relevantMask |= Bitboard.MSB(NorthRay(square));
+            relevantMask |= Bitboard.MSB(EastRay(square));
+            relevantMask |= Bitboard.LSB(SouthRay(square));
+            relevantMask |= Bitboard.LSB(WestRay(square));
+
+            mask &= ~relevantMask;
+        }
 
         return mask;
 
     }
 
-    static ulong CreateMovementMaskDiag(int square, ulong blockers = 0)
+    // Populate all the possible movements, and optionally each movement with blockers.
+    public static ulong CreateMovementMaskDiag(int square, ulong blockers = 0, bool relevancyMask = false)
     {
         ulong mask = 0;
 
@@ -154,6 +186,18 @@ public static class MagicBitboard
             mask |= NorthWestRay(square);
             mask |= SouthWestRay(square);
             mask |= SouthEastRay(square);
+
+            if (relevancyMask)
+            {
+                ulong relevantMask = 0;
+                relevantMask |= Bitboard.MSB(NorthEastRay(square));
+                relevantMask |= Bitboard.MSB(NorthWestRay(square));
+                relevantMask |= Bitboard.LSB(SouthEastRay(square));
+                relevantMask |= Bitboard.LSB(SouthWestRay(square));
+
+                mask &= ~relevantMask;
+            }
+
             return mask;
         }
 
@@ -169,26 +213,46 @@ public static class MagicBitboard
 
         if (northEastBlockedSquare != 64)
             mask |= NorthEastRay(square) ^ NorthEastRay(northEastBlockedSquare);
+        else
+            mask |= NorthEastRay(square);
 
         if (northWestBlockedSquare != 64)
             mask |= NorthWestRay(square) ^ NorthWestRay(northWestBlockedSquare);
+        else
+            mask |= NorthWestRay(square);
 
         if (southEastBlockedSquare != -1)
             mask |= SouthEastRay(square) ^ SouthEastRay(southEastBlockedSquare);
+        else
+            mask |= SouthEastRay(square);
 
         if (southWestBlockedSquare != -1)
             mask |= SouthWestRay(square) ^ SouthWestRay(southWestBlockedSquare);
+        else
+            mask |= SouthWestRay(square);
+
+        if (relevancyMask)
+        {
+            ulong relevantMask = 0;
+            relevantMask |= Bitboard.MSB(NorthEastRay(square));
+            relevantMask |= Bitboard.MSB(NorthWestRay(square));
+            relevantMask |= Bitboard.LSB(SouthEastRay(square));
+            relevantMask |= Bitboard.LSB(SouthWestRay(square));
+
+            mask &= ~relevantMask;
+        }
 
         return mask;
     }
 
+    // Populate the magic bitboard table
     static ulong[] PopulateAttacks(int square, bool ortho, ulong magic, int shift)
     {
         int numBits = 64 - shift;
         int lookupSize = 1 << numBits;
         ulong[] table = new ulong[lookupSize];
 
-        ulong movementMask = ortho ? CreateMovementMaskOrtho(square) : CreateMovementMaskDiag(square);
+        ulong movementMask = ortho ? CreateMovementMaskOrtho(square, 0, true) : CreateMovementMaskDiag(square, 0, true);
         ulong[] blockerPatterns = CreateBlockerBitboards(movementMask);
 
         foreach (ulong pattern in blockerPatterns)

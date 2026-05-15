@@ -257,6 +257,7 @@ public static class MoveGenerator
         // Useful info
         int piece = board.GetPiece(location);
         int pieceColor = Piece.GetPieceColor(piece);
+        int enemyColor = pieceColor == Piece.White ? Piece.Black : Piece.White;
         ulong friendlyPieces = pieceColor == Piece.White ?
             board.GetWhiteBitboard() :
             board.GetBlackBitboard();
@@ -293,20 +294,20 @@ public static class MoveGenerator
         // Determine if rights are had
         if (board.HasCastleRight(pieceColor) && !capturesOnly)
         {
-            ulong attackedSquares = GenerateAttackedBitboard(board);
+            ulong attackedSquares = GenerateAllAttacksBitboard(board, enemyColor);
             ulong kingBitboard = Bitboard.SquareToBitboard(location);
-
+            
             if (board.KingsideCastleRight(pieceColor))
             {
                 ulong mask = pieceColor == Piece.White ? WhiteKingsideCastlePath : BlackKingsideCastlePath;
-                
+
                 // Check that squares aren't occupied, squares aren't under attack, nor in check
                 if (Bitboard.Intersection(mask, occupiedSquares) == 0 &&
                     Bitboard.Intersection(mask, attackedSquares) == 0 &&
                     Bitboard.Intersection(attackedSquares, kingBitboard) == 0)
                 {
                     // Add move
-                    moves.Add(new Move(location, location + 2, Move.Castle));                    
+                    moves.Add(new Move(location, location + 2, Move.Castle));
                 }
             }
 
@@ -324,6 +325,7 @@ public static class MoveGenerator
                     moves.Add(new Move(location, location - 2, Move.Castle));
                 }
             }
+                       
         }
 
         return moves;
@@ -583,10 +585,12 @@ public static class MoveGenerator
         ulong attacks = 0;
 
         int piece = board.GetPiece(location);
+        int pieceColor = Piece.GetPieceColor(piece);
+        int enemyColor = Piece.GetOpponentPieceColor(piece);
         bool isDiag = Piece.IsDiagonalPiece(piece);
         bool isOrth = Piece.IsOrthogonalPiece(piece);
         ulong occupiedBitboard = board.GetOccupancyBitboard();
-        ulong friendlyPieces = board.GetFriendlyBitboard();
+        ulong friendlyPieces = pieceColor == Piece.White ? board.GetWhiteBitboard() : board.GetBlackBitboard();
 
         if (isDiag)
             attacks |= MagicBitboard.GetDiagAttacks(location, occupiedBitboard);
