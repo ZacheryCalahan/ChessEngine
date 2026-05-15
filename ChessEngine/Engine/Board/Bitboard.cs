@@ -62,6 +62,9 @@ public static class Bitboard
 
     public static int MSBToSquare(ulong a)
     {
+        if (a == 0)
+            return -1;
+
         return BitOperations.Log2(a);
     }
 
