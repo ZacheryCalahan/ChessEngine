@@ -1,6 +1,3 @@
-﻿
-using System.ComponentModel;
-
 public static class MoveGenerator
 {
     // Tables for move types
@@ -8,37 +5,19 @@ public static class MoveGenerator
     static readonly ulong[,] PawnAttacks = new ulong[2, 64]; // Captures of the pawn
     static readonly ulong[] KingAttacks = new ulong[64];
     static readonly ulong[] KnightAttacks = new ulong[64];
-    static readonly ulong[] OrthogonalAttacks = new ulong[64];
-    static readonly ulong[] DiagonalAttacks = new ulong[64];
-    static readonly ulong[] OmniAttacks = new ulong[64];
-    public static readonly ulong[,] RayAttacks = new ulong[8, 64]; // Array of attacks by direction
 
-    static readonly ulong WhiteKingsideCastlePath = 0x60;
-    static readonly ulong WhiteQueensideCastlePath = 0xE;
-    static readonly ulong BlackKingsideCastlePath = 0x6000000000000000;
-    static readonly ulong BlackQueensideCastlePath = 0xE00000000000000;
-    static readonly ulong WhiteQueensideCastleAttacks = 0xC;
-    static readonly ulong BlackQueensideCastleAttacks = 0xC00000000000000;
+    // Useful bitboards for castling
+    const ulong WhiteKingsideCastlePath = 0x60;
+    const ulong WhiteQueensideCastlePath = 0xE;
+    const ulong BlackKingsideCastlePath = 0x6000000000000000;
+    const ulong BlackQueensideCastlePath = 0xE00000000000000;
+    const ulong WhiteQueensideCastleAttacks = 0xC;
+    const ulong BlackQueensideCastleAttacks = 0xC00000000000000;
 
     static MoveGenerator()
     {
         PopulateMoveTables();
     }
-
-    // Enum for directions, for ray attacks.
-    public enum Dir
-    {
-        North,
-        NorthEast,
-        East,
-        SouthEast,
-        South,
-        SouthWest,
-        West,
-        NorthWest
-    }
-
-    public static bool IsDirPositive(Dir a) => a is Dir.North or Dir.NorthWest or Dir.NorthEast or Dir.East;
 
     static void PopulateMoveTables()
     {
@@ -56,96 +35,6 @@ public static class MoveGenerator
                 (square & ~Bitboard.FileH) << 9 |
                 (square & ~Bitboard.FileH) >> 7 |
                 (square & ~Bitboard.FileA) >> 9;
-        }
-
-        // Ray Attacks
-
-        ulong nort = 0x101010101010100;
-        for (int i = 0; i < 64; i++, nort <<= 1) // Calculate north rays
-        {
-            RayAttacks[(int) Dir.North, i] = nort;
-        }
-
-        ulong noea = 0x8040201008040200;
-        for (int f = 0; f < 8; f++, noea = Bitboard.East(noea)) // Northeast rays
-        {
-            ulong ne = noea;
-            for (int r8 = 0; r8 < 64; r8 += 8, ne <<= 8)
-            {
-                RayAttacks[(int) Dir.NorthEast, r8 + f] = ne;
-            }
-        }
-
-        for (int i = 0; i < 64; i++) // East rays
-        {
-            RayAttacks[(int) Dir.East, i] = ((1UL << (i | 7)) - (1UL << i)) << 1;
-        }
-
-        ulong nowe = 0x0102040810204000;
-        for (int f = 7; f >= 0; f--, nowe = Bitboard.West(nowe)) // Northwest rays
-        {
-            ulong nw = nowe;
-            for (int r8 = 0; r8 < 64; r8 += 8, nw <<= 8)
-            {
-                RayAttacks[(int) Dir.NorthWest, r8 + f] = nw;
-            }
-        }
-
-        ulong sout = 0x0080808080808080;
-        for (int i = 63; i >= 0; i--, sout >>= 1) // South rays
-        {
-            RayAttacks[(int) Dir.South, i] = sout;
-        }
-
-        ulong soea = 0x0002040810204080;
-        for (int f = 0; f < 8; f++, soea = Bitboard.East(soea)) // Southeast rays
-        {
-            ulong se = soea;
-            for (int r8 = 56; r8 >= 0; r8 -= 8, se >>= 8)
-            {
-                RayAttacks[(int) Dir.SouthEast, r8 + f] = se;
-            }
-        }
-
-        for (int i = 63; i >= 0; i--) // West rays
-        {
-            RayAttacks[(int) Dir.West, i] = (1UL << i) - (1UL << (i & 56));
-        }
-
-        ulong sowe = 0x0040201008040201;
-        for (int f = 7; f >= 0; f--, sowe = Bitboard.West(sowe)) // Southwest rays
-        {
-            ulong sw = sowe;
-            for (int r8 = 56; r8 >= 0; r8 -= 8, sw >>= 8)
-            {
-                RayAttacks[(int) Dir.SouthWest, r8 + f] = sw;
-            }
-        }
-
-        // Orthogonal
-        for (int i = 0; i < 64; i++)
-        {
-            OrthogonalAttacks[i] =
-                RayAttacks[(int) Dir.North, i] |
-                RayAttacks[(int) Dir.East, i] |
-                RayAttacks[(int) Dir.South, i] |
-                RayAttacks[(int) Dir.West, i];
-        }
-
-        // Diagonal
-        for (int i = 0; i < 64; i++)
-        {
-            DiagonalAttacks[i] =
-                RayAttacks[(int) Dir.NorthEast, i] |
-                RayAttacks[(int) Dir.NorthWest, i] |
-                RayAttacks[(int) Dir.SouthEast, i] |
-                RayAttacks[(int) Dir.SouthWest, i];
-        }
-
-        // Omni
-        for (int i = 0; i < 64; i++)
-        {
-            OmniAttacks[i] = OrthogonalAttacks[i] | DiagonalAttacks[i];
         }
 
         // Knight attacks

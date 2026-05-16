@@ -33,7 +33,8 @@ public static class MagicBitboard
     {
         // This TECHNICALLY does nothing in the method, BUT
         // It allows the static constructor to be called whenever.
-        // This way we're not generating the tables when we are attempting move search.
+        // This way we're not generating the tables when we are attempting move search,
+        // and instead upon initialization of the engine.
     }
 
     public static ulong GetSliderAttacks(int square, ulong blockers, bool ortho)
