@@ -1,4 +1,4 @@
-public static class MoveGenerator
+﻿public static class MoveGenerator
 {
     // Tables for move types
     static readonly ulong[,] PawnMoves = new ulong[2, 64]; // Moves of the pawn
@@ -14,6 +14,14 @@ public static class MoveGenerator
     const ulong WhiteQueensideCastleAttacks = 0xC;
     const ulong BlackQueensideCastleAttacks = 0xC00000000000000;
 
+    // State of the move generator
+    public static bool InCheck { get; private set; }
+    public static ulong OpponentAttacks {  get; private set; }
+    static ulong attackingPieces;
+    static int attackingPieceCount;
+    static ulong checkRays; // Rays that attack the king
+    static ulong pinRaysToKing; // Rays that attack the king, but are stopped by a friendly piece.
+    
     static MoveGenerator()
     {
         PopulateMoveTables();
@@ -582,6 +590,9 @@ public static class MoveGenerator
         return attacks;
     }
 
+    static void UpdateAttackData(Board board)
+    {
 
+    }
 }
 
