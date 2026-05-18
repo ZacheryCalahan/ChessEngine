@@ -15,13 +15,27 @@
     const ulong BlackQueensideCastleAttacks = 0xC00000000000000;
 
     // State of the move generator
+    static bool isWhiteMove;
+    static int friendlyColor;
+    static int opponentColor;
+    static int friendlyKingSquare;
     public static bool InCheck { get; private set; }
+    static bool inDoubleCheck;
     public static ulong OpponentAttacks {  get; private set; }
-    static ulong attackingPieces;
-    static int attackingPieceCount;
-    static ulong checkRays; // Rays that attack the king
-    static ulong pinRaysToKing; // Rays that attack the king, but are stopped by a friendly piece.
     
+    static ulong checkRayBitmask; // Intersect this to find legal moves
+    static ulong pinRaysToKing; // Pieces in these rays are not allowed to move
+    static ulong opponentSlidingAttacks;
+    static ulong opponentOrthoSliders;
+    static ulong opponentDiagSliders;
+    static ulong opponentPieces;
+    static ulong friendlyPieces;
+    static ulong allPieces;
+    static ulong emptySquares;
+    
+
+    static Board board;
+
     static MoveGenerator()
     {
         PopulateMoveTables();
@@ -590,9 +604,155 @@
         return attacks;
     }
 
-    static void UpdateAttackData(Board board)
+    static void ResetState()
     {
+        isWhiteMove = board.IsWhiteTurn;
+        friendlyColor = isWhiteMove ? Piece.White : Piece.Black;
+        opponentColor = isWhiteMove ? Piece.Black : Piece.White;
+        friendlyKingSquare = board.AllPieces[Piece.King | friendlyColor][0];
+        InCheck = false;
+        inDoubleCheck = false;
+        OpponentAttacks = 0;
+        checkRayBitmask = 0;
+        pinRaysToKing = 0;
+        opponentPieces = board.GetOpponentBitboard();
+        friendlyPieces = board.GetFriendlyBitboard();
+        allPieces = opponentPieces | friendlyPieces;
+        emptySquares = ~allPieces;
+        opponentOrthoSliders = board.GetBitboard(Piece.Queen | opponentColor) | board.GetBitboard(Piece.Rook | opponentColor);
+        opponentDiagSliders = board.GetBitboard(Piece.Queen | opponentColor) | board.GetBitboard(Piece.Bishop | opponentColor);
 
+        UpdateAttackData();
     }
+
+    static void GenerateSlidingAttackBitboard()
+    {
+        opponentSlidingAttacks = 0;
+        UpdateSlideAttack(board.GetBitboard(Piece.Bishop | opponentColor) | board.GetBitboard(Piece.Queen | opponentColor), false);
+        UpdateSlideAttack(board.GetBitboard(Piece.Rook | opponentColor) | board.GetBitboard(Piece.Queen | opponentColor), true);
+    }
+
+    static void UpdateSlideAttack(ulong bitboard, bool ortho)
+    {
+        ulong blockers = board.GetOccupancyBitboard() & ~(1ul << friendlyKingSquare); // All occupants BUT friendly king
+
+        while (bitboard != 0)
+        {
+            int startSquare = Bitboard.LSBToSquare(bitboard);
+            opponentSlidingAttacks |= MagicBitboard.GetSliderAttacks(startSquare, blockers, ortho);
+            bitboard = Bitboard.PopLSB(bitboard);
+        }
+    }
+
+    static void UpdateAttackData()
+    {
+        // Update all pins, attacks, etc for use in legal move generation.
+        GenerateSlidingAttackBitboard();
+
+        // Check in all directions of king for attacks and pins of sliding pieces
+        for (int dir = 0; dir < 8; dir++)
+        {
+            // Determine if this direction has an opponent slider
+            ulong attackRay = MagicBitboard.DirToRay(friendlyKingSquare, (MagicBitboard.Dir) dir);
+            ulong opponentSliders = MagicBitboard.IsDirOrtho(dir) ? opponentOrthoSliders : opponentDiagSliders;
+
+            if ((attackRay & opponentSliders) == 0)
+                continue; // No possible pin ray on this path
+
+            // Generate the ray from king to nearest opponent slider
+            ulong opponentSliderOnRay = attackRay & opponentSliders;
+            int pinSliderSquare = MagicBitboard.IsDirPositive(dir) ?
+                Bitboard.LSBToSquare(opponentSliderOnRay) : Bitboard.MSBToSquare(opponentSliderOnRay);
+            ulong possiblePinRay = attackRay ^ MagicBitboard.DirToRay(pinSliderSquare, (MagicBitboard.Dir) dir);
+
+            // Search this ray for check or pin
+            ulong friendlyOnRay = possiblePinRay & friendlyPieces;
+            ulong opponentPiecesOnRay = possiblePinRay & opponentPieces;
+            ulong piecesOnRay = possiblePinRay & allPieces;
+
+            if (opponentPiecesOnRay != 0)
+                continue; // This ray is blocked by an opponent piece, just ignore the ray.
+
+            // Check for pins
+            if (friendlyOnRay != 0)
+            {
+                if (Bitboard.BitCount(friendlyOnRay) > 1)
+                    continue; // If more than one friendly piece, a check can not be exposed in one move.
+
+                // Only one friendly piece on ray, must be pin!
+                pinRaysToKing |= possiblePinRay;
+            }
+            else
+            {
+                // No friendly pieces on the ray, this must be a check!
+                checkRayBitmask |= possiblePinRay;
+                inDoubleCheck = InCheck;
+                InCheck = true;
+            }
+
+            if (inDoubleCheck)
+            {
+                // Only king moves allowed in double check, stop checking.
+                break;
+            }
+        }
+
+        // Knight attacks on king
+
+        ulong opponentKnightAttacks = 0;
+        ulong opponentKnights = board.GetBitboard(Piece.Knight | opponentColor);
+        ulong friendlyKingBoard = 1ul << friendlyKingSquare;
+
+        while (opponentKnights != 0)
+        {
+            int knightSquare = Bitboard.LSBToSquare(opponentKnights);
+            ulong knightAttacks = KnightAttacks[knightSquare];
+            opponentKnightAttacks |= knightAttacks;
+            if ((knightAttacks & friendlyKingBoard) != 0)
+            {
+                inDoubleCheck = InCheck;
+                InCheck = true;
+                checkRayBitmask |= 1ul << knightSquare; // Mark this piece capture as a legal move in mask
+            }
+
+            opponentKnights = Bitboard.PopLSB(opponentKnights);
+        }
+
+        // Pawn attacks on king
+        ulong opponentPawns = board.GetBitboard(Piece.Pawn | opponentColor);
+        ulong opponentPawnAttacks = AllPawnAttacksBitboard(opponentPawns, opponentColor);
+        if ((opponentPawnAttacks & friendlyKingBoard) != 0)
+        {
+            inDoubleCheck = InCheck;
+            InCheck = true;
+
+            // Treat the king like a pawn to find the attackers
+            ulong pawnAttackers = isWhiteMove ? PawnAttacks[0, friendlyKingSquare] : PawnAttacks[0, friendlyKingSquare];
+            pawnAttackers &= opponentPawns;
+            checkRayBitmask |= pawnAttackers;
+        }
+
+        OpponentAttacks = opponentSlidingAttacks | opponentKnightAttacks | opponentPawnAttacks | KingAttacks[friendlyKingSquare];
+
+        if (!InCheck)
+            checkRayBitmask = Bitboard.UniversalSet; // Allow all moves as legal moves
+    }
+
+    static ulong AllPawnAttacksBitboard(ulong pawnBitboard, int color)
+    {
+        ulong pawnAttacks = 0;
+        if (color == Piece.White)
+        {
+            pawnAttacks |= (pawnBitboard & ~Bitboard.FileA) << 7; // left
+            pawnAttacks |= (pawnBitboard & ~Bitboard.FileH) << 9; // right
+        }
+        else
+        {
+            pawnAttacks |= (pawnBitboard & ~Bitboard.FileA) >> 9; // left
+            pawnAttacks |= (pawnBitboard & ~Bitboard.FileH) >> 7; // right
+        }
+        return pawnAttacks;
+    }
+
 }
 

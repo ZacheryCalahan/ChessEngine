@@ -54,6 +54,38 @@ public static class MagicBitboard
         return DiagAttacks[square][key];
     }
     
+    public enum Dir
+    {
+        NorthWest,
+        North,
+        NorthEast,
+        East,
+        SouthEast,
+        South,
+        SouthWest,
+        West
+    }
+
+    public static bool IsDirPositive(int dir) => dir < 4;
+
+    public static ulong DirToRay(int square, Dir dir)
+    {
+        return dir switch
+        {
+            Dir.NorthWest => NorthWestRay(square),
+            Dir.North     => NorthRay(square),
+            Dir.NorthEast => NorthEastRay(square),
+            Dir.East      => EastRay(square),
+            Dir.SouthEast => SouthEastRay(square),
+            Dir.South     => SouthRay(square),
+            Dir.SouthWest => SouthWestRay(square),
+            Dir.West      => WestRay(square),
+            _ => 0
+        };
+    }
+
+    public static bool IsDirOrtho(int dir) => (dir & 0b1) == 1; // Faster than modulo. Probably.
+
     static ulong NorthRay(int square) => 0x101010101010100ul << square;
     static ulong EastRay(int square) => ((1ul << (square | 7)) - (1ul << square)) << 1;
     static ulong SouthRay(int square) => 0x0080808080808080ul >> (63 - square);
